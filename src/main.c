@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "utils.h"
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <path to data.win or game.unx>\n", argv[0]);
@@ -13,11 +15,9 @@ int main(int argc, char* argv[]) {
 
     DataWin* dataWin = DataWin_parse(filePath);
 
-    printf("Loaded successfully!\n\n");
-    DataWin_printSummary(dataWin);
+    Gen8* gen8 = &dataWin->gen8;
+    printf("Loaded \"%s\" (%d) successfully!\n", gen8->name, gen8->gameID);
 
     DataWin_free(dataWin);
-    printf("Freed all resources. Clean exit.\n");
-
     return 0;
 }

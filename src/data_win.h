@@ -599,4 +599,4 @@ typedef struct DataWin {
 
 DataWin* DataWin_parse(const char* filePath);
 void DataWin_free(DataWin* dataWin);
-void DataWin_printSummary(DataWin* dataWin);
+void DataWin_printDebugSummary(DataWin* dataWin);

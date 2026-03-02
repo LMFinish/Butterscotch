@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "utils.h"
+
 // ===[ HELPERS ]===
 
 // Reads a pointer list header: count + absolute-offset pointers.
@@ -13,7 +15,7 @@ static uint32_t* DataWinReader_readPointerTable(BinaryReader* reader, uint32_t* 
     *outCount = BinaryReader_readUint32(reader);
     if (*outCount == 0) return nullptr;
     uint32_t* ptrs = malloc(*outCount * sizeof(uint32_t));
-    for (uint32_t i = 0; i < *outCount; i++) {
+    repeat(*outCount, i) {
         ptrs[i] = BinaryReader_readUint32(reader);
     }
     return ptrs;
@@ -27,7 +29,7 @@ static EventAction* DataWinReader_readEventActions(BinaryReader* reader, uint32_
     if (count == 0) { free(ptrs); return nullptr; }
 
     EventAction* actions = malloc(count * sizeof(EventAction));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         actions[i].libID = BinaryReader_readUint32(reader);
         actions[i].id = BinaryReader_readUint32(reader);
@@ -82,7 +84,7 @@ static void DataWinReader_parseGEN8(BinaryReader* reader, DataWin* dw) {
     g->roomOrderCount = BinaryReader_readUint32(reader);
     if (g->roomOrderCount > 0) {
         g->roomOrder = malloc(g->roomOrderCount * sizeof(int32_t));
-        for (uint32_t i = 0; i < g->roomOrderCount; i++) {
+        repeat(g->roomOrderCount, i) {
             g->roomOrder[i] = BinaryReader_readInt32(reader);
         }
     } else {
@@ -119,7 +121,7 @@ static void DataWinReader_parseOPTN(BinaryReader* reader, DataWin* dw) {
     o->constantCount = BinaryReader_readUint32(reader);
     if (o->constantCount > 0) {
         o->constants = malloc(o->constantCount * sizeof(OptnConstant));
-        for (uint32_t i = 0; i < o->constantCount; i++) {
+        repeat(o->constantCount, i) {
             o->constants[i].name = BinaryReader_readStringPtr(reader);
             o->constants[i].value = BinaryReader_readStringPtr(reader);
         }
@@ -137,7 +139,7 @@ static void DataWinReader_parseLANG(BinaryReader* reader, DataWin* dw) {
     // Entry IDs
     if (l->entryCount > 0) {
         l->entryIds = malloc(l->entryCount * sizeof(const char*));
-        for (uint32_t i = 0; i < l->entryCount; i++) {
+        repeat(l->entryCount, i) {
             l->entryIds[i] = BinaryReader_readStringPtr(reader);
         }
     } else {
@@ -147,13 +149,13 @@ static void DataWinReader_parseLANG(BinaryReader* reader, DataWin* dw) {
     // Languages
     if (l->languageCount > 0) {
         l->languages = malloc(l->languageCount * sizeof(Language));
-        for (uint32_t i = 0; i < l->languageCount; i++) {
+        repeat(l->languageCount, i) {
             l->languages[i].name = BinaryReader_readStringPtr(reader);
             l->languages[i].region = BinaryReader_readStringPtr(reader);
             l->languages[i].entryCount = l->entryCount;
             if (l->entryCount > 0) {
                 l->languages[i].entries = malloc(l->entryCount * sizeof(const char*));
-                for (uint32_t j = 0; j < l->entryCount; j++) {
+                repeat(l->entryCount, j) {
                     l->languages[i].entries[j] = BinaryReader_readStringPtr(reader);
                 }
             } else {
@@ -175,7 +177,7 @@ static void DataWinReader_parseEXTN(BinaryReader* reader, DataWin* dw) {
     if (extCount == 0) { free(extPtrs); e->extensions = nullptr; return; }
 
     e->extensions = malloc(extCount * sizeof(Extension));
-    for (uint32_t i = 0; i < extCount; i++) {
+    repeat(extCount, i) {
         BinaryReader_seek(reader, extPtrs[i]);
         Extension* ext = &e->extensions[i];
         ext->folderName = BinaryReader_readStringPtr(reader);
@@ -189,7 +191,7 @@ static void DataWinReader_parseEXTN(BinaryReader* reader, DataWin* dw) {
 
         if (fileCount > 0) {
             ext->files = malloc(fileCount * sizeof(ExtensionFile));
-            for (uint32_t j = 0; j < fileCount; j++) {
+            repeat(fileCount, j) {
                 BinaryReader_seek(reader, filePtrs[j]);
                 ExtensionFile* file = &ext->files[j];
                 file->filename = BinaryReader_readStringPtr(reader);
@@ -204,7 +206,7 @@ static void DataWinReader_parseEXTN(BinaryReader* reader, DataWin* dw) {
 
                 if (funcCount > 0) {
                     file->functions = malloc(funcCount * sizeof(ExtensionFunction));
-                    for (uint32_t k = 0; k < funcCount; k++) {
+                    repeat(funcCount, k) {
                         BinaryReader_seek(reader, funcPtrs[k]);
                         ExtensionFunction* func = &file->functions[k];
                         func->name = BinaryReader_readStringPtr(reader);
@@ -217,7 +219,7 @@ static void DataWinReader_parseEXTN(BinaryReader* reader, DataWin* dw) {
                         func->argumentCount = BinaryReader_readUint32(reader);
                         if (func->argumentCount > 0) {
                             func->arguments = malloc(func->argumentCount * sizeof(uint32_t));
-                            for (uint32_t a = 0; a < func->argumentCount; a++) {
+                            repeat(func->argumentCount, a) {
                                 func->arguments[a] = BinaryReader_readUint32(reader);
                             }
                         } else {
@@ -250,7 +252,7 @@ static void DataWinReader_parseSOND(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); s->sounds = nullptr; return; }
 
     s->sounds = malloc(count * sizeof(Sound));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Sound* snd = &s->sounds[i];
         snd->name = BinaryReader_readStringPtr(reader);
@@ -286,7 +288,7 @@ static void DataWinReader_parseAGRP(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); a->audioGroups = nullptr; return; }
 
     a->audioGroups = malloc(count * sizeof(AudioGroup));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         a->audioGroups[i].name = BinaryReader_readStringPtr(reader);
     }
@@ -303,7 +305,7 @@ static void DataWinReader_parseSPRT(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); s->sprites = nullptr; return; }
 
     s->sprites = malloc(count * sizeof(Sprite));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Sprite* spr = &s->sprites[i];
         spr->name = BinaryReader_readStringPtr(reader);
@@ -332,7 +334,7 @@ static void DataWinReader_parseSPRT(BinaryReader* reader, DataWin* dw) {
         spr->textureCount = (uint32_t)check;
         if (spr->textureCount > 0) {
             spr->textureOffsets = malloc(spr->textureCount * sizeof(uint32_t));
-            for (uint32_t j = 0; j < spr->textureCount; j++) {
+            repeat(spr->textureCount, j) {
                 spr->textureOffsets[j] = BinaryReader_readUint32(reader);
             }
         } else {
@@ -354,7 +356,7 @@ static void DataWinReader_parseBGND(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); b->backgrounds = nullptr; return; }
 
     b->backgrounds = malloc(count * sizeof(Background));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Background* bg = &b->backgrounds[i];
         bg->name = BinaryReader_readStringPtr(reader);
@@ -376,7 +378,7 @@ static void DataWinReader_parsePATH(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); p->paths = nullptr; return; }
 
     p->paths = malloc(count * sizeof(GamePath));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         GamePath* path = &p->paths[i];
         path->name = BinaryReader_readStringPtr(reader);
@@ -388,7 +390,7 @@ static void DataWinReader_parsePATH(BinaryReader* reader, DataWin* dw) {
         path->pointCount = BinaryReader_readUint32(reader);
         if (path->pointCount > 0) {
             path->points = malloc(path->pointCount * sizeof(PathPoint));
-            for (uint32_t j = 0; j < path->pointCount; j++) {
+            repeat(path->pointCount, j) {
                 path->points[j].x = BinaryReader_readFloat32(reader);
                 path->points[j].y = BinaryReader_readFloat32(reader);
                 path->points[j].speed = BinaryReader_readFloat32(reader);
@@ -410,7 +412,7 @@ static void DataWinReader_parseSCPT(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); s->scripts = nullptr; return; }
 
     s->scripts = malloc(count * sizeof(Script));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         s->scripts[i].name = BinaryReader_readStringPtr(reader);
         s->scripts[i].codeId = BinaryReader_readInt32(reader);
@@ -424,7 +426,7 @@ static void DataWinReader_parseGLOB(BinaryReader* reader, DataWin* dw) {
     g->count = BinaryReader_readUint32(reader);
     if (g->count > 0) {
         g->codeIds = malloc(g->count * sizeof(int32_t));
-        for (uint32_t i = 0; i < g->count; i++) {
+        repeat(g->count, i) {
             g->codeIds[i] = BinaryReader_readInt32(reader);
         }
     } else {
@@ -442,7 +444,7 @@ static void DataWinReader_parseSHDR(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); s->shaders = nullptr; return; }
 
     s->shaders = malloc(count * sizeof(Shader));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Shader* sh = &s->shaders[i];
         sh->name = BinaryReader_readStringPtr(reader);
@@ -460,7 +462,7 @@ static void DataWinReader_parseSHDR(BinaryReader* reader, DataWin* dw) {
         sh->vertexAttributeCount = BinaryReader_readUint32(reader);
         if (sh->vertexAttributeCount > 0) {
             sh->vertexAttributes = malloc(sh->vertexAttributeCount * sizeof(const char*));
-            for (uint32_t j = 0; j < sh->vertexAttributeCount; j++) {
+            repeat(sh->vertexAttributeCount, j) {
                 sh->vertexAttributes[j] = BinaryReader_readStringPtr(reader);
             }
         } else {
@@ -506,7 +508,7 @@ static void DataWinReader_parseFONT(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); f->fonts = nullptr; return; }
 
     f->fonts = malloc(count * sizeof(Font));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Font* font = &f->fonts[i];
         font->name = BinaryReader_readStringPtr(reader);
@@ -529,7 +531,7 @@ static void DataWinReader_parseFONT(BinaryReader* reader, DataWin* dw) {
 
         if (glyphCount > 0) {
             font->glyphs = malloc(glyphCount * sizeof(FontGlyph));
-            for (uint32_t j = 0; j < glyphCount; j++) {
+            repeat(glyphCount, j) {
                 BinaryReader_seek(reader, glyphPtrs[j]);
                 FontGlyph* glyph = &font->glyphs[j];
                 glyph->character = BinaryReader_readUint16(reader);
@@ -572,7 +574,7 @@ static void DataWinReader_parseTMLN(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); t->timelines = nullptr; return; }
 
     t->timelines = malloc(count * sizeof(Timeline));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Timeline* tl = &t->timelines[i];
         tl->name = BinaryReader_readStringPtr(reader);
@@ -583,13 +585,13 @@ static void DataWinReader_parseTMLN(BinaryReader* reader, DataWin* dw) {
 
             // Pass 1: Read step + event pointer pairs
             uint32_t* eventPtrs = malloc(tl->momentCount * sizeof(uint32_t));
-            for (uint32_t j = 0; j < tl->momentCount; j++) {
+            repeat(tl->momentCount, j) {
                 tl->moments[j].step = BinaryReader_readUint32(reader);
                 eventPtrs[j] = BinaryReader_readUint32(reader);
             }
 
             // Pass 2: Parse event action lists
-            for (uint32_t j = 0; j < tl->momentCount; j++) {
+            repeat(tl->momentCount, j) {
                 BinaryReader_seek(reader, eventPtrs[j]);
                 tl->moments[j].actions = DataWinReader_readEventActions(reader, &tl->moments[j].actionCount);
             }
@@ -611,7 +613,7 @@ static void DataWinReader_parseOBJT(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); o->objects = nullptr; return; }
 
     o->objects = malloc(count * sizeof(GameObject));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         GameObject* obj = &o->objects[i];
         obj->name = BinaryReader_readStringPtr(reader);
@@ -663,7 +665,7 @@ static void DataWinReader_parseOBJT(BinaryReader* reader, DataWin* dw) {
 
             if (eventCount > 0) {
                 obj->eventLists[eventType].events = malloc(eventCount * sizeof(ObjectEvent));
-                for (uint32_t j = 0; j < eventCount; j++) {
+                repeat(eventCount, j) {
                     BinaryReader_seek(reader, eventPtrs[j]);
                     obj->eventLists[eventType].events[j].eventSubtype = BinaryReader_readUint32(reader);
                     obj->eventLists[eventType].events[j].actions = DataWinReader_readEventActions(reader, &obj->eventLists[eventType].events[j].actionCount);
@@ -696,7 +698,7 @@ static void DataWinReader_parseROOM(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); rc->rooms = nullptr; return; }
 
     rc->rooms = malloc(count * sizeof(Room));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         Room* room = &rc->rooms[i];
         room->name = BinaryReader_readStringPtr(reader);
@@ -786,7 +788,7 @@ static void DataWinReader_parseROOM(BinaryReader* reader, DataWin* dw) {
 
             if (objCount > 0) {
                 room->gameObjects = malloc(objCount * sizeof(RoomGameObject));
-                for (uint32_t j = 0; j < objCount; j++) {
+                repeat(objCount, j) {
                     BinaryReader_seek(reader, objPtrs[j]);
                     RoomGameObject* go = &room->gameObjects[j];
                     go->x = BinaryReader_readInt32(reader);
@@ -815,7 +817,7 @@ static void DataWinReader_parseROOM(BinaryReader* reader, DataWin* dw) {
 
             if (tileCount > 0) {
                 room->tiles = malloc(tileCount * sizeof(RoomTile));
-                for (uint32_t j = 0; j < tileCount; j++) {
+                repeat(tileCount, j) {
                     BinaryReader_seek(reader, tilePtrs[j]);
                     RoomTile* tile = &room->tiles[j];
                     tile->x = BinaryReader_readInt32(reader);
@@ -850,7 +852,7 @@ static void DataWinReader_parseTPAG(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); t->items = nullptr; return; }
 
     t->items = malloc(count * sizeof(TexturePageItem));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         TexturePageItem* item = &t->items[i];
         item->sourceX = BinaryReader_readUint16(reader);
@@ -888,7 +890,7 @@ static void DataWinReader_parseCODE(BinaryReader* reader, DataWin* dw, uint32_t 
     if (codeCount == 0) { free(codePtrs); c->entries = nullptr; return; }
 
     c->entries = malloc(codeCount * sizeof(CodeEntry));
-    for (uint32_t i = 0; i < codeCount; i++) {
+    repeat(codeCount, i) {
         BinaryReader_seek(reader, codePtrs[i]);
         CodeEntry* entry = &c->entries[i];
         entry->name = BinaryReader_readStringPtr(reader);
@@ -919,7 +921,7 @@ static void DataWinReader_parseVARI(BinaryReader* reader, DataWin* dw, uint32_t 
 
     if (v->variableCount > 0) {
         v->variables = malloc(v->variableCount * sizeof(Variable));
-        for (uint32_t i = 0; i < v->variableCount; i++) {
+        repeat(v->variableCount, i) {
             Variable* var = &v->variables[i];
             var->name = BinaryReader_readStringPtr(reader);
             var->instanceType = BinaryReader_readInt32(reader);
@@ -939,7 +941,7 @@ static void DataWinReader_parseFUNC(BinaryReader* reader, DataWin* dw) {
     f->functionCount = BinaryReader_readUint32(reader);
     if (f->functionCount > 0) {
         f->functions = malloc(f->functionCount * sizeof(Function));
-        for (uint32_t i = 0; i < f->functionCount; i++) {
+        repeat(f->functionCount, i) {
             f->functions[i].name = BinaryReader_readStringPtr(reader);
             f->functions[i].occurrences = BinaryReader_readUint32(reader);
             f->functions[i].firstAddress = BinaryReader_readUint32(reader);
@@ -952,14 +954,14 @@ static void DataWinReader_parseFUNC(BinaryReader* reader, DataWin* dw) {
     f->codeLocalsCount = BinaryReader_readUint32(reader);
     if (f->codeLocalsCount > 0) {
         f->codeLocals = malloc(f->codeLocalsCount * sizeof(CodeLocals));
-        for (uint32_t i = 0; i < f->codeLocalsCount; i++) {
+        repeat(f->codeLocalsCount, i) {
             CodeLocals* cl = &f->codeLocals[i];
             cl->localVarCount = BinaryReader_readUint32(reader);
             cl->name = BinaryReader_readStringPtr(reader);
 
             if (cl->localVarCount > 0) {
                 cl->locals = malloc(cl->localVarCount * sizeof(LocalVar));
-                for (uint32_t j = 0; j < cl->localVarCount; j++) {
+                repeat(cl->localVarCount, j) {
                     cl->locals[j].index = BinaryReader_readUint32(reader);
                     cl->locals[j].name = BinaryReader_readStringPtr(reader);
                 }
@@ -982,7 +984,7 @@ static void DataWinReader_parseSTRG(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); s->strings = nullptr; return; }
 
     s->strings = malloc(count * sizeof(const char*));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         // Pointer table points to the string's length prefix.
         // The actual string content starts 4 bytes after.
         s->strings[i] = (const char*)(reader->buffer + ptrs[i] + 4);
@@ -1001,7 +1003,7 @@ static void DataWinReader_parseTXTR(BinaryReader* reader, DataWin* dw, size_t ch
 
     // Read metadata entries
     t->textures = malloc(count * sizeof(Texture));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         t->textures[i].scaled = BinaryReader_readUint32(reader);
         t->textures[i].blobOffset = BinaryReader_readUint32(reader);
@@ -1009,7 +1011,7 @@ static void DataWinReader_parseTXTR(BinaryReader* reader, DataWin* dw, size_t ch
     free(ptrs);
 
     // Compute blob sizes from successive offsets
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         if (t->textures[i].blobOffset == 0) {
             t->textures[i].blobSize = 0; // external texture
             continue;
@@ -1032,7 +1034,7 @@ static void DataWinReader_parseAUDO(BinaryReader* reader, DataWin* dw) {
     if (count == 0) { free(ptrs); a->entries = nullptr; return; }
 
     a->entries = malloc(count * sizeof(AudioEntry));
-    for (uint32_t i = 0; i < count; i++) {
+    repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         a->entries[i].dataSize = BinaryReader_readUint32(reader);
         a->entries[i].dataOffset = (uint32_t)BinaryReader_getPosition(reader);
@@ -1174,7 +1176,7 @@ void DataWin_free(DataWin* dw) {
     // LANG
     free(dw->lang.entryIds);
     if (dw->lang.languages) {
-        for (uint32_t i = 0; i < dw->lang.languageCount; i++) {
+        repeat(dw->lang.languageCount, i) {
             free(dw->lang.languages[i].entries);
         }
         free(dw->lang.languages);
@@ -1182,13 +1184,13 @@ void DataWin_free(DataWin* dw) {
 
     // EXTN
     if (dw->extn.extensions) {
-        for (uint32_t i = 0; i < dw->extn.count; i++) {
+        repeat(dw->extn.count, i) {
             Extension* ext = &dw->extn.extensions[i];
             if (ext->files) {
-                for (uint32_t j = 0; j < ext->fileCount; j++) {
+                repeat(ext->fileCount, j) {
                     ExtensionFile* file = &ext->files[j];
                     if (file->functions) {
-                        for (uint32_t k = 0; k < file->functionCount; k++) {
+                        repeat(file->functionCount, k) {
                             free(file->functions[k].arguments);
                         }
                         free(file->functions);
@@ -1208,7 +1210,7 @@ void DataWin_free(DataWin* dw) {
 
     // SPRT
     if (dw->sprt.sprites) {
-        for (uint32_t i = 0; i < dw->sprt.count; i++) {
+        repeat(dw->sprt.count, i) {
             free(dw->sprt.sprites[i].textureOffsets);
         }
         free(dw->sprt.sprites);
@@ -1219,7 +1221,7 @@ void DataWin_free(DataWin* dw) {
 
     // PATH
     if (dw->path.paths) {
-        for (uint32_t i = 0; i < dw->path.count; i++) {
+        repeat(dw->path.count, i) {
             free(dw->path.paths[i].points);
         }
         free(dw->path.paths);
@@ -1233,7 +1235,7 @@ void DataWin_free(DataWin* dw) {
 
     // SHDR
     if (dw->shdr.shaders) {
-        for (uint32_t i = 0; i < dw->shdr.count; i++) {
+        repeat(dw->shdr.count, i) {
             free(dw->shdr.shaders[i].vertexAttributes);
         }
         free(dw->shdr.shaders);
@@ -1241,10 +1243,10 @@ void DataWin_free(DataWin* dw) {
 
     // FONT
     if (dw->font.fonts) {
-        for (uint32_t i = 0; i < dw->font.count; i++) {
+        repeat(dw->font.count, i) {
             Font* font = &dw->font.fonts[i];
             if (font->glyphs) {
-                for (uint32_t j = 0; j < font->glyphCount; j++) {
+                repeat(font->glyphCount, j) {
                     free(font->glyphs[j].kerning);
                 }
                 free(font->glyphs);
@@ -1255,10 +1257,10 @@ void DataWin_free(DataWin* dw) {
 
     // TMLN
     if (dw->tmln.timelines) {
-        for (uint32_t i = 0; i < dw->tmln.count; i++) {
+        repeat(dw->tmln.count, i) {
             Timeline* tl = &dw->tmln.timelines[i];
             if (tl->moments) {
-                for (uint32_t j = 0; j < tl->momentCount; j++) {
+                repeat(tl->momentCount, j) {
                     free(tl->moments[j].actions);
                 }
                 free(tl->moments);
@@ -1269,13 +1271,13 @@ void DataWin_free(DataWin* dw) {
 
     // OBJT
     if (dw->objt.objects) {
-        for (uint32_t i = 0; i < dw->objt.count; i++) {
+        repeat(dw->objt.count, i) {
             GameObject* obj = &dw->objt.objects[i];
             free(obj->physicsVertices);
-            for (int e = 0; e < OBJT_EVENT_TYPE_COUNT; e++) {
+            repeat(OBJT_EVENT_TYPE_COUNT, e) {
                 ObjectEventList* list = &obj->eventLists[e];
                 if (list->events) {
-                    for (uint32_t j = 0; j < list->eventCount; j++) {
+                    repeat(list->eventCount, j) {
                         free(list->events[j].actions);
                     }
                     free(list->events);
@@ -1287,7 +1289,7 @@ void DataWin_free(DataWin* dw) {
 
     // ROOM
     if (dw->room.rooms) {
-        for (uint32_t i = 0; i < dw->room.count; i++) {
+        repeat(dw->room.count, i) {
             free(dw->room.rooms[i].gameObjects);
             free(dw->room.rooms[i].tiles);
         }
@@ -1306,7 +1308,7 @@ void DataWin_free(DataWin* dw) {
     // FUNC
     free(dw->func.functions);
     if (dw->func.codeLocals) {
-        for (uint32_t i = 0; i < dw->func.codeLocalsCount; i++) {
+        repeat(dw->func.codeLocalsCount, i) {
             free(dw->func.codeLocals[i].locals);
         }
         free(dw->func.codeLocals);
