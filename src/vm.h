@@ -140,6 +140,7 @@ typedef struct VMContext {
 VMContext* VM_create(DataWin* dataWin);
 RValue VM_executeCode(VMContext* ctx, int32_t codeIndex);
 RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount);
+CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName);
 void VM_free(VMContext* ctx);
 
 static const char* VM_getCallerName(VMContext* ctx) {

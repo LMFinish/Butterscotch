@@ -152,18 +152,18 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
         // Find current code's CodeLocals to map argument name to local varID
         const char* codeName = ctx->currentCodeName;
         if (codeName != nullptr) {
-            forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
-                if (strcmp(cl->name, codeName) == 0) {
-                    forEach(LocalVar, local, cl->locals, cl->localVarCount) {
-                        if (strcmp(local->name, name) == 0) {
-                            if (ctx->localVarCount > local->index) {
-                                RValue val = ctx->localVars[local->index];
-                                val.ownsString = false;
-                                return val;
-                            }
+            CodeLocals* cl = VM_resolveCodeLocals(ctx, codeName);
+
+            if (cl != nullptr) {
+                forEach(LocalVar, local, cl->locals, cl->localVarCount) {
+                    if (strcmp(local->name, name) == 0) {
+                        if (ctx->localVarCount > local->index) {
+                            RValue val = ctx->localVars[local->index];
+                            val.ownsString = false;
+                            return val;
                         }
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -221,18 +221,16 @@ void VMBuiltins_setVariable(VMContext* ctx, const char* name, RValue val, int32_
     if (argNumber != -1) {
         const char* codeName = ctx->currentCodeName;
         if (codeName != nullptr) {
-            forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
-                if (strcmp(cl->name, codeName) == 0) {
-                    forEach(LocalVar, local, cl->locals, cl->localVarCount) {
-                        if (strcmp(local->name, name) == 0) {
-                            if (ctx->localVarCount > local->index) {
-                                RValue_free(&ctx->localVars[local->index]);
-                                ctx->localVars[local->index] = val;
-                            }
-                            return;
+            CodeLocals* cl = VM_resolveCodeLocals(ctx, codeName);
+            if (cl != nullptr) {
+                forEach(LocalVar, local, cl->locals, cl->localVarCount) {
+                    if (strcmp(local->name, name) == 0) {
+                        if (ctx->localVarCount > local->index) {
+                            RValue_free(&ctx->localVars[local->index]);
+                            ctx->localVars[local->index] = val;
                         }
+                        return;
                     }
-                    break;
                 }
             }
         }

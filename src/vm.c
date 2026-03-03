@@ -1169,6 +1169,17 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     return result;
 }
 
+CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName) {
+    CodeLocals* codeLocals = nullptr;
+    forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
+        if (strcmp(cl->name, codeName) == 0) {
+            codeLocals = cl;
+            break;
+        }
+    }
+    return codeLocals;
+}
+
 RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount) {
     require(codeIndex >= 0 && ctx->dataWin->code.count > (uint32_t) codeIndex);
     CodeEntry* code = &ctx->dataWin->code.entries[codeIndex];
@@ -1213,14 +1224,7 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     // Let's find the code locals entry and map argument names to varIDs.
 
     // Find CodeLocals to map argument names to varIDs
-    CodeLocals* codeLocals = nullptr;
-    forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
-        if (strcmp(cl->name, code->name) == 0) {
-            codeLocals = cl;
-            break;
-        }
-    }
-
+    CodeLocals* codeLocals = VM_resolveCodeLocals(ctx, code->name);
     if (codeLocals != nullptr && args != nullptr) {
         repeat(argCount, argIdx) {
             char argName[32];
