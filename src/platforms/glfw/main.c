@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "runner.h"
 #include "stb_ds.h"
 #include "stb_image_write.h"
 
@@ -169,6 +170,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // Initialize the runner
+    Runner* runner = Runner_create(dataWin, vm);
+
     // Init GLFW
     if (!glfwInit()) {
         fprintf(stderr, "Failed to initialize GLFW\n");
@@ -206,7 +210,11 @@ int main(int argc, char* argv[]) {
     // Main loop
     int frameCount = 0;
     while (!glfwWindowShouldClose(window)) {
-        glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        int rInt = BGR_R(runner->currentRoom->backgroundColor);
+        int gInt = BGR_R(runner->currentRoom->backgroundColor);
+        int bInt = BGR_R(runner->currentRoom->backgroundColor);
+
+        glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Capture screenshot if this frame matches a requested frame
@@ -230,10 +238,13 @@ int main(int argc, char* argv[]) {
     }
 
     // Cleanup
-    VM_free(vm);
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    Runner_free(runner);
+    VM_free(vm);
     DataWin_free(dataWin);
+
     freeCommandLineArgs(&args);
     return 0;
 }

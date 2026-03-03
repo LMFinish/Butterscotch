@@ -21,3 +21,7 @@ fprintf(stderr, "Requirement failed at %s:%d: %s\n", __FILE__, __LINE__, message
 abort(); \
 } \
 } while (0)
+
+#define BGR_B(c) (((c) >> 16) & 0xFF)
+#define BGR_G(c) (((c) >>  8) & 0xFF)
+#define BGR_R(c) (((c) >>  0) & 0xFF)
