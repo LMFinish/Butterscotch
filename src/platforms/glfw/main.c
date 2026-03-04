@@ -428,7 +428,7 @@ int main(int argc, char* argv[]) {
 
     // Main loop
     double lastFrameTime = glfwGetTime();
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window) && !runner->shouldExit) {
         // Clear last frame's pressed/released state, then poll new input events
         RunnerKeyboard_beginFrame(runner->keyboard);
         glfwPollEvents();
@@ -566,5 +566,7 @@ int main(int argc, char* argv[]) {
     DataWin_free(dataWin);
 
     freeCommandLineArgs(&args);
+
+    printf("Bye! :3\n");
     return 0;
 }

@@ -1232,7 +1232,11 @@ static RValue builtinWindowGetHeight(VMContext* ctx, [[maybe_unused]] RValue* ar
 
 // Game stubs
 STUB_RETURN_UNDEFINED(game_restart)
-STUB_RETURN_UNDEFINED(game_end)
+static RValue builtinGameEnd(VMContext* ctx, [[maybe_unused]] RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    runner->shouldExit = true;
+    return RValue_makeUndefined();
+}
 STUB_RETURN_UNDEFINED(game_save)
 STUB_RETURN_UNDEFINED(game_load)
 
@@ -1960,7 +1964,7 @@ void VMBuiltins_registerAll(void) {
 
     // Game
     registerBuiltin("game_restart", builtin_game_restart);
-    registerBuiltin("game_end", builtin_game_end);
+    registerBuiltin("game_end", builtinGameEnd);
     registerBuiltin("game_save", builtin_game_save);
     registerBuiltin("game_load", builtin_game_load);
 

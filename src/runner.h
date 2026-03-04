@@ -64,6 +64,7 @@ typedef struct Runner {
     RuntimeBackground backgrounds[8];
     uint32_t backgroundColor;      // runtime-mutable (BGR format)
     bool drawBackgroundColor;
+    bool shouldExit;
 } Runner;
 
 Runner* Runner_create(DataWin* dataWin, VMContext* vm);
