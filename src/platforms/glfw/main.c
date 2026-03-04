@@ -42,6 +42,7 @@ typedef struct {
     bool printRooms;
     bool printDeclaredFunctions;
     int exitAtFrame;
+    double speedMultiplier;
 } CommandLineArgs;
 
 static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) {
@@ -64,11 +65,13 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"trace-frames", no_argument, nullptr, 'k'},
         {"exit-at-frame", required_argument, nullptr, 'x'},
         {"dump-frame", required_argument, nullptr, 'd'},
+        {"speed", required_argument, nullptr, 'M'},
         {nullptr,               0,                 nullptr,  0 }
     };
 
     args->screenshotFrames = nullptr;
     args->exitAtFrame = -1;
+    args->speedMultiplier = 1.0;
 
     int opt;
     while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1) {
@@ -143,6 +146,16 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 hmput(args->dumpFrames, (int) frame, true);
                 break;
             }
+            case 'M': {
+                char* endPtr;
+                double speed = strtod(optarg, &endPtr);
+                if (*endPtr != '\0' || speed <= 0.0) {
+                    fprintf(stderr, "Error: Invalid speed multiplier '%s' for --speed (must be > 0)\n", optarg);
+                    exit(1);
+                }
+                args->speedMultiplier = speed;
+                break;
+            }
             default:
                 fprintf(stderr, "Usage: %s [--headless] [--screenshot=PATTERN] [--screenshot-at-frame=N ...] <path to data.win or game.unx>\n", argv[0]);
                 exit(1);
@@ -158,6 +171,11 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
 
     if (hmlen(args->screenshotFrames) > 0 && args->screenshotPattern == nullptr) {
         fprintf(stderr, "Error: --screenshot-at-frame requires --screenshot to be set\n");
+        exit(1);
+    }
+
+    if (args->headless && args->speedMultiplier != 1.0) {
+        fprintf(stderr, "You can't set the speed multiplier while running in headless mode! Headless mode always run in real time\n");
         exit(1);
     }
 }
@@ -408,7 +426,7 @@ int main(int argc, char* argv[]) {
 
         // Limit frame rate to room speed (skip in headless mode for max speed!!)
         if (!args.headless && runner->currentRoom->speed > 0) {
-            double targetFrameTime = 1.0 / runner->currentRoom->speed;
+            double targetFrameTime = 1.0 / (runner->currentRoom->speed * args.speedMultiplier);
             double nextFrameTime = lastFrameTime + targetFrameTime;
             // Sleep for most of the remaining time, then spin-wait for precision
             double remaining = nextFrameTime - glfwGetTime();
