@@ -1249,7 +1249,7 @@ static RValue builtinInstanceExists(VMContext* ctx, RValue* args, int32_t argCou
         // Object type index: search for any active instance with that objectIndex
         repeat(instanceCount, i) {
             Instance* inst = runner->instances[i];
-            if (inst != nullptr && inst->active && inst->objectIndex == id) {
+            if (inst->active && inst->objectIndex == id) {
                 found = true;
                 break;
             }
@@ -1258,7 +1258,7 @@ static RValue builtinInstanceExists(VMContext* ctx, RValue* args, int32_t argCou
         // Instance ID: search for a specific instance
         repeat(instanceCount, i) {
             Instance* inst = runner->instances[i];
-            if (inst != nullptr && inst->active && inst->instanceId == (uint32_t) id) {
+            if (inst->active && inst->instanceId == (uint32_t) id) {
                 found = true;
                 break;
             }
@@ -1283,7 +1283,7 @@ static RValue builtinInstanceDestroy(VMContext* ctx, RValue* args, int32_t argCo
         // Object type index: destroy all active instances with that objectIndex
         repeat(instanceCount, i) {
             Instance* inst = runner->instances[i];
-            if (inst != nullptr && inst->active && inst->objectIndex == id) {
+            if (inst->active && inst->objectIndex == id) {
                 Runner_destroyInstance(runner, inst);
             }
         }
@@ -1291,7 +1291,7 @@ static RValue builtinInstanceDestroy(VMContext* ctx, RValue* args, int32_t argCo
         // Instance ID: destroy that specific instance
         repeat(instanceCount, i) {
             Instance* inst = runner->instances[i];
-            if (inst != nullptr && inst->active && inst->instanceId == (uint32_t) id) {
+            if (inst->active && inst->instanceId == (uint32_t) id) {
                 Runner_destroyInstance(runner, inst);
                 break;
             }

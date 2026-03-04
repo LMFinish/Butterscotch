@@ -215,7 +215,7 @@ void Runner_executeEventForAll(Runner* runner, int32_t eventType, int32_t eventS
     int32_t count = (int32_t) arrlen(runner->instances);
     repeat(count, i) {
         Instance* inst = runner->instances[i];
-        if (inst != nullptr && inst->active) {
+        if (inst->active) {
             Runner_executeEvent(runner, inst, eventType, eventSubtype);
         }
     }
@@ -284,7 +284,7 @@ void Runner_draw(Runner* runner) {
     int32_t count = (int32_t) arrlen(runner->instances);
     repeat(count, i) {
         Instance* inst = runner->instances[i];
-        if (inst != nullptr && inst->active && inst->visible) {
+        if (inst->active && inst->visible) {
             arrput(drawList, inst);
         }
     }
@@ -395,9 +395,9 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     int32_t oldCount = (int32_t) arrlen(runner->instances);
     repeat(oldCount, i) {
         Instance* inst = runner->instances[i];
-        if (inst != nullptr && inst->persistent) {
+        if (inst->persistent) {
             arrput(keptInstances, inst);
-        } else if (inst != nullptr) {
+        } else {
             Instance_free(inst);
         }
     }
@@ -411,7 +411,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         // Check if a persistent instance with this ID already exists
         bool alreadyExists = false;
         repeat(arrlen(runner->instances), j) {
-            if (runner->instances[j] != nullptr && runner->instances[j]->instanceId == roomObj->instanceID) {
+            if (runner->instances[j]->instanceId == roomObj->instanceID) {
                 alreadyExists = true;
                 break;
             }
@@ -481,9 +481,9 @@ void Runner_cleanupDestroyedInstances(Runner* runner) {
     int32_t writeIdx = 0;
     repeat(count, i) {
         Instance* inst = runner->instances[i];
-        if (inst != nullptr && inst->active) {
+        if (inst->active) {
             runner->instances[writeIdx++] = inst;
-        } else if (inst != nullptr) {
+        } else {
             Instance_free(inst);
         }
     }
@@ -546,7 +546,7 @@ void Runner_step(Runner* runner) {
     int32_t alarmCount = (int32_t) arrlen(runner->instances);
     repeat(alarmCount, i) {
         Instance* inst = runner->instances[i];
-        if (inst == nullptr || !inst->active) continue;
+        if (!inst->active) continue;
 
         GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
 
@@ -636,7 +636,7 @@ void Runner_dumpState(Runner* runner) {
 
     repeat(instanceCount, i) {
         Instance* inst = runner->instances[i];
-        if (inst == nullptr || !inst->active) continue;
+        if (!inst->active) continue;
 
         const char* objName = (inst->objectIndex >= 0 && dataWin->objt.count > (uint32_t) inst->objectIndex) ? dataWin->objt.objects[inst->objectIndex].name : "<unknown>";
 
@@ -800,7 +800,7 @@ char* Runner_dumpStateJson(Runner* runner) {
 
     repeat(instanceCount, i) {
         Instance* inst = runner->instances[i];
-        if (inst == nullptr || !inst->active) continue;
+        if (!inst->active) continue;
 
         const char* objName = (inst->objectIndex >= 0 && dataWin->objt.count > (uint32_t) inst->objectIndex) ? dataWin->objt.objects[inst->objectIndex].name : nullptr;
 
