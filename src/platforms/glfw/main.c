@@ -211,11 +211,6 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         exit(1);
     }
 
-    if (args->dumpJsonFilePattern != nullptr && hmlen(args->dumpJsonFrames) == 0) {
-        fprintf(stderr, "Error: --dump-frame-json-file requires --dump-frame-json to be set\n");
-        exit(1);
-    }
-
     if (args->headless && args->speedMultiplier != 1.0) {
         fprintf(stderr, "You can't set the speed multiplier while running in headless mode! Headless mode always run in real time\n");
         exit(1);
@@ -477,7 +472,23 @@ int main(int argc, char* argv[]) {
             if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F11)) {
                 fprintf(stderr, "Debug: Dumping runner state at frame %d\n", runner->frameCount);
                 char* json = Runner_dumpStateJson(runner);
-                printf("%s", json);
+
+                if (args.dumpJsonFilePattern != nullptr) {
+                    char filename[512];
+                    snprintf(filename, sizeof(filename), args.dumpJsonFilePattern, runner->frameCount);
+                    FILE* f = fopen(filename, "w");
+                    if (f != nullptr) {
+                        fwrite(json, 1, strlen(json), f);
+                        fputc('\n', f);
+                        fclose(f);
+                        printf("JSON dump saved: %s\n", filename);
+                    } else {
+                        fprintf(stderr, "Error: Could not write JSON dump to '%s'\n", filename);
+                    }
+                } else {
+                    printf("%s\n", json);
+                }
+
                 free(json);
             }
         }
