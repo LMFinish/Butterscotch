@@ -1525,6 +1525,20 @@ static RValue builtinActionMoveTo(VMContext* ctx, [[maybe_unused]] RValue* args,
     return RValue_makeUndefined();
 }
 
+static RValue builtinActionSetFriction(VMContext* ctx, [[maybe_unused]] RValue* args, [[maybe_unused]] int32_t argCount) {
+    double val = RValue_toReal(args[0]);
+
+    if (ctx->currentInstance != nullptr) {
+        Instance* inst = (Instance*) ctx->currentInstance;
+        if (ctx->actionRelativeFlag) {
+            inst->friction += val;
+        } else {
+            inst->friction = val;
+        }
+    }
+    return RValue_makeUndefined();
+}
+
 // Buffer stubs
 STUB_RETURN_ZERO(buffer_create)
 STUB_RETURN_UNDEFINED(buffer_delete)
@@ -2346,6 +2360,7 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("action_set_relative", builtinActionSetRelative);
     registerBuiltin("action_move", builtinActionMove);
     registerBuiltin("action_move_to", builtinActionMoveTo);
+    registerBuiltin("action_set_friction", builtinActionSetFriction);
     registerBuiltin("event_inherited", builtinEventInherited);
     registerBuiltin("event_user", builtinEventUser);
     registerBuiltin("event_perform", builtinEventPerform);
