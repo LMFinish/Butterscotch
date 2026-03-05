@@ -164,6 +164,8 @@ typedef struct VMContext {
     struct { uint32_t key; uint32_t value; }* varRefMap;
     struct { uint32_t key; uint32_t value; }* funcRefMap;
     bool hasFixedSeed;
+    // Cross-reference map for disassembler: targetCodeIndex -> stb_ds array of callerCodeIndex
+    struct { int32_t key; int32_t* value; }* crossRefMap;
 } VMContext;
 
 // ===[ Public API ]===
@@ -173,6 +175,8 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
 CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName);
 void VM_free(VMContext* ctx);
 bool VM_isObjectOrDescendant(DataWin* dataWin, int32_t objectIndex, int32_t targetObjectIndex);
+void VM_buildCrossReferences(VMContext* ctx);
+void VM_disassemble(VMContext* ctx, int32_t codeIndex);
 
 static const char* VM_getCallerName(VMContext* ctx) {
     return ctx->currentCodeName != nullptr ? ctx->currentCodeName : "<unknown>";

@@ -40,6 +40,7 @@ typedef struct {
     StringBooleanEntry* eventsToBeTraced;
     StringBooleanEntry* opcodesToBeTraced;
     StringBooleanEntry* stackToBeTraced;
+    StringBooleanEntry* disassemble;
     bool headless;
     bool traceFrames;
     bool printRooms;
@@ -76,6 +77,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"speed", required_argument, nullptr, 'M'},
         {"seed", required_argument, nullptr, 'Z'},
         {"debug", no_argument, nullptr, 'D'},
+        {"disassemble", required_argument, nullptr, 'A'},
         {nullptr,               0,                 nullptr,  0 }
     };
 
@@ -182,6 +184,9 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
             case 'D':
                 args->debug = true;
                 break;
+            case 'A':
+                shput(args->disassemble, optarg, true);
+                break;
             case 'Z': {
                 char* endPtr;
                 long seedVal = strtol(optarg, &endPtr, 10);
@@ -229,6 +234,7 @@ static void freeCommandLineArgs(CommandLineArgs* args) {
     shfree(args->eventsToBeTraced);
     shfree(args->opcodesToBeTraced);
     shfree(args->stackToBeTraced);
+    shfree(args->disassemble);
 }
 
 // ===[ SCREENSHOT ]===
@@ -366,6 +372,29 @@ int main(int argc, char* argv[]) {
         }
         VM_free(vm);
         DataWin_free(dataWin);
+        return 0;
+    }
+
+    if (shlen(args.disassemble) > 0) {
+        VM_buildCrossReferences(vm);
+        if (shgeti(args.disassemble, "*") >= 0) {
+            repeat(dataWin->code.count, i) {
+                VM_disassemble(vm, (int32_t) i);
+            }
+        } else {
+            for (ptrdiff_t i = 0; shlen(args.disassemble) > i; i++) {
+                const char* name = args.disassemble[i].key;
+                ptrdiff_t idx = shgeti(vm->funcMap, (char*) name);
+                if (idx >= 0) {
+                    VM_disassemble(vm, vm->funcMap[idx].value);
+                } else {
+                    fprintf(stderr, "Error: Script '%s' not found in funcMap\n", name);
+                }
+            }
+        }
+        VM_free(vm);
+        DataWin_free(dataWin);
+        freeCommandLineArgs(&args);
         return 0;
     }
 
