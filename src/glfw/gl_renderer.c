@@ -230,23 +230,23 @@ static void glDestroy(Renderer* renderer) {
     free(gl);
 }
 
-static void glBeginFrame(Renderer* renderer, int32_t viewX, int32_t viewY, int32_t viewW, int32_t viewH, int32_t windowW, int32_t windowH) {
+static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32_t windowW, int32_t windowH) {
     GLRenderer* gl = (GLRenderer*) renderer;
 
     gl->quadCount = 0;
     gl->currentTextureId = 0;
-
-    // Store window size for endFrame blit
     gl->windowW = windowW;
     gl->windowH = windowH;
+    gl->gameW = gameW;
+    gl->gameH = gameH;
 
-    // Resize FBO texture if view dimensions changed
-    if (viewW != gl->fboWidth || viewH != gl->fboHeight) {
+    // Resize FBO to game resolution if needed
+    if (gameW != gl->fboWidth || gameH != gl->fboHeight) {
         if (gl->fboTexture != 0) glDeleteTextures(1, &gl->fboTexture);
 
         glGenTextures(1, &gl->fboTexture);
         glBindTexture(GL_TEXTURE_2D, gl->fboTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, viewW, viewH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gameW, gameH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -258,19 +258,50 @@ static void glBeginFrame(Renderer* renderer, int32_t viewX, int32_t viewY, int32
             fprintf(stderr, "GL: Framebuffer incomplete (status=0x%X)\n", status);
         }
 
-        gl->fboWidth = viewW;
-        gl->fboHeight = viewH;
-        fprintf(stderr, "GL: FBO resized to %dx%d\n", viewW, viewH);
+        gl->fboWidth = gameW;
+        gl->fboHeight = gameH;
+        fprintf(stderr, "GL: FBO resized to %dx%d\n", gameW, gameH);
     }
 
-    // Bind FBO -- all rendering goes to the FBO texture
+    // Bind FBO and clear
     glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
-    glViewport(0, 0, viewW, viewH);
+    glViewport(0, 0, gameW, gameH);
+}
+
+static void glBeginView(Renderer* renderer, int32_t viewX, int32_t viewY, int32_t viewW, int32_t viewH, int32_t portX, int32_t portY, int32_t portW, int32_t portH, float viewAngle) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+
+    gl->quadCount = 0;
+    gl->currentTextureId = 0;
+
+    // Set viewport and scissor to the port rectangle within the FBO
+    // FBO uses game resolution, port coordinates are in game space
+    // OpenGL viewport Y is bottom-up, game Y is top-down
+    int32_t glPortY = gl->gameH - portY - portH;
+    glViewport(portX, glPortY, portW, portH);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(portX, glPortY, portW, portH);
 
     // Build orthographic projection (Y-down for GML coordinate system)
     Matrix4f projection;
     Matrix4f_identity(&projection);
     Matrix4f_ortho(&projection, (float) viewX, (float) (viewX + viewW), (float) (viewY + viewH), (float) viewY, -1.0f, 1.0f);
+
+    if (viewAngle != 0.0f) {
+        // GML view_angle: rotate camera by this angle (degrees, counter-clockwise)
+        // To rotate the camera, we rotate the world in the opposite direction around the view center
+        float cx = (float) viewX + (float) viewW / 2.0f;
+        float cy = (float) viewY + (float) viewH / 2.0f;
+        Matrix4f rot;
+        Matrix4f_identity(&rot);
+        Matrix4f_translate(&rot, cx, cy, 0.0f);
+        float angleRad = viewAngle * (float) M_PI / 180.0f;
+        Matrix4f_rotateZ(&rot, -angleRad);
+        Matrix4f_translate(&rot, -cx, -cy, 0.0f);
+        Matrix4f result;
+        Matrix4f_multiply(&result, &projection, &rot);
+        projection = result;
+    }
 
     glUseProgram(gl->shaderProgram);
     glUniformMatrix4fv(gl->uProjection, 1, GL_FALSE, projection.m);
@@ -280,12 +311,17 @@ static void glBeginFrame(Renderer* renderer, int32_t viewX, int32_t viewY, int32
     glBindVertexArray(gl->vao);
 }
 
-static void glEndFrame(Renderer* renderer) {
+static void glEndView(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*) renderer;
     flushBatch(gl);
+    glDisable(GL_SCISSOR_TEST);
+}
+
+static void glEndFrame(Renderer* renderer) {
+    GLRenderer* gl = (GLRenderer*) renderer;
     glBindVertexArray(0);
 
-    // Blit FBO to default framebuffer (screen)
+    // Blit the full game-resolution FBO to the window
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, gl->fboWidth, gl->fboHeight, 0, 0, gl->windowW, gl->windowH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -681,6 +717,8 @@ static RendererVtable glVtable = {
     .destroy = glDestroy,
     .beginFrame = glBeginFrame,
     .endFrame = glEndFrame,
+    .beginView = glBeginView,
+    .endView = glEndView,
     .drawSprite = glDrawSprite,
     .drawSpritePart = glDrawSpritePart,
     .drawRectangle = glDrawRectangle,

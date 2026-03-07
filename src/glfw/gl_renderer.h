@@ -32,6 +32,8 @@ typedef struct {
     int32_t fboHeight;
     int32_t windowW; // stored from beginFrame for endFrame blit
     int32_t windowH;
+    int32_t gameW; // game resolution (for FBO sizing)
+    int32_t gameH;
 } GLRenderer;
 
 Renderer* GLRenderer_create(void);

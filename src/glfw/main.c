@@ -625,27 +625,12 @@ int main(int argc, char* argv[]) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Compute view parameters
-        int32_t viewX = 0, viewY = 0;
-        int32_t viewW = (int32_t) gen8->defaultWindowWidth;
-        int32_t viewH = (int32_t) gen8->defaultWindowHeight;
+        int32_t gameW = (int32_t) gen8->defaultWindowWidth;
+        int32_t gameH = (int32_t) gen8->defaultWindowHeight;
 
-        if (activeRoom->flags & 1) {
-            // Views are enabled, use the first enabled view
-            for (int32_t vi = 0; 8 > vi; vi++) {
-                if (activeRoom->views[vi].enabled) {
-                    viewX = activeRoom->views[vi].viewX;
-                    viewY = activeRoom->views[vi].viewY;
-                    viewW = activeRoom->views[vi].viewWidth;
-                    viewH = activeRoom->views[vi].viewHeight;
-                    break;
-                }
-            }
-        }
+        renderer->vtable->beginFrame(renderer, gameW, gameH, fbWidth, fbHeight);
 
-        renderer->vtable->beginFrame(renderer, viewX, viewY, viewW, viewH, fbWidth, fbHeight);
-
-        // Now FBO is bound, clear with room background color
+        // Clear FBO with room background color
         if (runner->drawBackgroundColor) {
             int rInt = BGR_R(runner->backgroundColor);
             int gInt = BGR_G(runner->backgroundColor);
@@ -656,8 +641,44 @@ int main(int argc, char* argv[]) {
         }
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Fire Draw events for all visible instances, sorted by depth
-        Runner_draw(runner);
+        // Render each enabled view (or a default full-screen view if views are disabled)
+        bool viewsEnabled = (activeRoom->flags & 1) != 0;
+        bool anyViewRendered = false;
+
+        if (viewsEnabled) {
+            repeat(8, vi) {
+                if (!activeRoom->views[vi].enabled) continue;
+
+                int32_t viewX = activeRoom->views[vi].viewX;
+                int32_t viewY = activeRoom->views[vi].viewY;
+                int32_t viewW = activeRoom->views[vi].viewWidth;
+                int32_t viewH = activeRoom->views[vi].viewHeight;
+                int32_t portX = activeRoom->views[vi].portX;
+                int32_t portY = activeRoom->views[vi].portY;
+                int32_t portW = activeRoom->views[vi].portWidth;
+                int32_t portH = activeRoom->views[vi].portHeight;
+                float viewAngle = runner->viewAngles[vi];
+
+                runner->viewCurrent = vi;
+                renderer->vtable->beginView(renderer, viewX, viewY, viewW, viewH, portX, portY, portW, portH, viewAngle);
+
+                Runner_draw(runner);
+
+                renderer->vtable->endView(renderer);
+                anyViewRendered = true;
+            }
+        }
+
+        if (!anyViewRendered) {
+            // No views enabled or views disabled: render with default full-screen view
+            runner->viewCurrent = 0;
+            renderer->vtable->beginView(renderer, 0, 0, gameW, gameH, 0, 0, gameW, gameH, 0.0f);
+            Runner_draw(runner);
+            renderer->vtable->endView(renderer);
+        }
+
+        // Reset view_current to 0 so non-Draw events (Step, Alarm, Create) see view_current = 0
+        runner->viewCurrent = 0;
 
         renderer->vtable->endFrame(renderer);
 

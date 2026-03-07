@@ -194,7 +194,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
         if (strcmp(name, "room_width") == 0) return RValue_makeReal((double) runner->currentRoom->width);
         if (strcmp(name, "room_height") == 0) return RValue_makeReal((double) runner->currentRoom->height);
         if (strcmp(name, "room_persistent") == 0) return RValue_makeBool(runner->currentRoom->persistent);
-        if (strcmp(name, "view_current") == 0) return RValue_makeReal(0.0);
+        if (strcmp(name, "view_current") == 0) return RValue_makeReal((double) runner->viewCurrent);
         if (strcmp(name, "view_xview") == 0) {
             if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) {
                 return RValue_makeReal((double) runner->currentRoom->views[arrayIndex].viewX);
