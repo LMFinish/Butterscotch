@@ -62,6 +62,18 @@ static void Renderer_drawSprite(Renderer* renderer, int32_t spriteIndex, int32_t
     renderer->vtable->drawSprite(renderer, tpagIndex, x, y, (float) sprite->originX, (float) sprite->originY, 1.0f, 1.0f, 0.0f, 0xFFFFFF, renderer->drawAlpha);
 }
 
+// Stretched: draw_sprite_stretched(sprite, subimg, x, y, w, h)
+static void Renderer_drawSpriteStretched(Renderer* renderer, int32_t spriteIndex, int32_t subimg, float x, float y, float w, float h, uint32_t color, float alpha) {
+    DataWin* dw = renderer->dataWin;
+    int32_t tpagIndex = Renderer_resolveTPAGIndex(dw, spriteIndex, subimg);
+    if (0 > tpagIndex) return;
+
+    TexturePageItem* tpag = &dw->tpag.items[tpagIndex];
+    float xscale = w / (float) tpag->boundingWidth;
+    float yscale = h / (float) tpag->boundingHeight;
+    renderer->vtable->drawSprite(renderer, tpagIndex, x, y, 0.0f, 0.0f, xscale, yscale, 0.0f, color, alpha);
+}
+
 // Full version: draw_sprite_ext(sprite, subimg, x, y, xscale, yscale, rot, color, alpha)
 static void Renderer_drawSpriteExt(Renderer* renderer, int32_t spriteIndex, int32_t subimg, float x, float y, float xscale, float yscale, float rot, uint32_t color, float alpha) {
     DataWin* dw = renderer->dataWin;

@@ -1799,6 +1799,46 @@ static RValue builtin_drawSpriteExt(VMContext* ctx, RValue* args, [[maybe_unused
     return RValue_makeUndefined();
 }
 
+static RValue builtin_drawSpriteStretched(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    int32_t subimg = RValue_toInt32(args[1]);
+    float x = (float) RValue_toReal(args[2]);
+    float y = (float) RValue_toReal(args[3]);
+    float w = (float) RValue_toReal(args[4]);
+    float h = (float) RValue_toReal(args[5]);
+
+    if (0 > subimg && ctx->currentInstance != nullptr) {
+        subimg = (int32_t) ((Instance*) ctx->currentInstance)->imageIndex;
+    }
+
+    Renderer_drawSpriteStretched(runner->renderer, spriteIndex, subimg, x, y, w, h, 0xFFFFFF, runner->renderer->drawAlpha);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_drawSpriteStretchedExt(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    int32_t subimg = RValue_toInt32(args[1]);
+    float x = (float) RValue_toReal(args[2]);
+    float y = (float) RValue_toReal(args[3]);
+    float w = (float) RValue_toReal(args[4]);
+    float h = (float) RValue_toReal(args[5]);
+    uint32_t color = (uint32_t) RValue_toInt32(args[6]);
+    float alpha = (float) RValue_toReal(args[7]);
+
+    if (0 > subimg && ctx->currentInstance != nullptr) {
+        subimg = (int32_t) ((Instance*) ctx->currentInstance)->imageIndex;
+    }
+
+    Renderer_drawSpriteStretched(runner->renderer, spriteIndex, subimg, x, y, w, h, color, alpha);
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_drawSpritePart(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     if (runner->renderer == nullptr) return RValue_makeUndefined();
@@ -2859,6 +2899,8 @@ void VMBuiltins_registerAll(void) {
     // Draw
     registerBuiltin("draw_sprite", builtin_drawSprite);
     registerBuiltin("draw_sprite_ext", builtin_drawSpriteExt);
+    registerBuiltin("draw_sprite_stretched", builtin_drawSpriteStretched);
+    registerBuiltin("draw_sprite_stretched_ext", builtin_drawSpriteStretchedExt);
     registerBuiltin("draw_sprite_part", builtin_drawSpritePart);
     registerBuiltin("draw_sprite_part_ext", builtin_drawSpritePartExt);
     registerBuiltin("draw_rectangle", builtin_drawRectangle);
