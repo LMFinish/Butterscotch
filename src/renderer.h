@@ -106,6 +106,40 @@ static void Renderer_drawSpritePart(Renderer* renderer, int32_t spriteIndex, int
     renderer->vtable->drawSpritePart(renderer, tpagIndex, left, top, width, height, x, y, 1.0f, 1.0f, 0xFFFFFF, renderer->drawAlpha);
 }
 
+// Draws part of a sprite with extended parameters (scale, color, alpha)
+static void Renderer_drawSpritePartExt(Renderer* renderer, int32_t spriteIndex, int32_t subimg, int32_t left, int32_t top, int32_t width, int32_t height, float x, float y, float xscale, float yscale, uint32_t color, float alpha) {
+    DataWin* dw = renderer->dataWin;
+    int32_t tpagIndex = Renderer_resolveTPAGIndex(dw, spriteIndex, subimg);
+    if (0 > tpagIndex) return;
+
+    TexturePageItem* tpag = &dw->tpag.items[tpagIndex];
+
+    // Clip region to TPAG bounds (same as Renderer_drawSpritePart)
+    if (left < tpag->targetX) {
+        int32_t off = tpag->targetX - left;
+        x += (float) off * xscale;
+        width -= off;
+        left = 0;
+    } else {
+        left -= tpag->targetX;
+    }
+
+    if (top < tpag->targetY) {
+        int32_t off = tpag->targetY - top;
+        y += (float) off * yscale;
+        height -= off;
+        top = 0;
+    } else {
+        top -= tpag->targetY;
+    }
+
+    if (width > tpag->sourceWidth - left) width = tpag->sourceWidth - left;
+    if (height > tpag->sourceHeight - top) height = tpag->sourceHeight - top;
+    if (0 >= width || 0 >= height) return;
+
+    renderer->vtable->drawSpritePart(renderer, tpagIndex, left, top, width, height, x, y, xscale, yscale, color, alpha);
+}
+
 // Resolves a BGND index to a TPAG index via Background.textureOffset -> DataWin_resolveTPAG()
 static int32_t Renderer_resolveBackgroundTPAGIndex(DataWin* dataWin, int32_t bgndIndex) {
     if (0 > bgndIndex || (uint32_t) bgndIndex >= dataWin->bgnd.count) return -1;
