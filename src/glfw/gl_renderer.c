@@ -5,9 +5,12 @@
 #include <glad/glad.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #include "stb_image.h"
+#include "stb_ds.h"
+#include "utils.h"
 
 // ===[ Constants ]===
 #define MAX_QUADS 4096
@@ -206,6 +209,11 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     gl->fboTexture = 0;
     gl->fboWidth = 0;
     gl->fboHeight = 0;
+
+    // Save original counts so we know which slots are from data.win vs dynamic
+    gl->originalTexturePageCount = gl->textureCount;
+    gl->originalTpagCount = dataWin->tpag.count;
+    gl->originalSpriteCount = dataWin->sprt.count;
 
     fprintf(stderr, "GL: Renderer initialized (%u texture pages)\n", gl->textureCount);
 }
@@ -710,6 +718,180 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
     free(processed);
 }
 
+// ===[ Dynamic Sprite Creation/Deletion ]===
+
+// Sentinel base for fake TPAG offsets used by dynamic sprites
+#define DYNAMIC_TPAG_OFFSET_BASE 0xD0000000u
+
+// Finds a free dynamic texture page slot (glTextures[i] == 0), or appends a new one.
+static uint32_t findOrAllocTexturePageSlot(GLRenderer* gl) {
+    // Scan dynamic range for a reusable slot
+    for (uint32_t i = gl->originalTexturePageCount; gl->textureCount > i; i++) {
+        if (gl->glTextures[i] == 0) return i;
+    }
+    // No free slot found, grow the arrays
+    uint32_t newPageId = gl->textureCount;
+    gl->textureCount++;
+    gl->glTextures = realloc(gl->glTextures, gl->textureCount * sizeof(GLuint));
+    gl->textureWidths = realloc(gl->textureWidths, gl->textureCount * sizeof(int32_t));
+    gl->textureHeights = realloc(gl->textureHeights, gl->textureCount * sizeof(int32_t));
+    gl->glTextures[newPageId] = 0;
+    gl->textureWidths[newPageId] = 0;
+    gl->textureHeights[newPageId] = 0;
+    return newPageId;
+}
+
+// Finds a free dynamic TPAG slot (texturePageId == -1), or appends a new one.
+static uint32_t findOrAllocTpagSlot(DataWin* dw, uint32_t originalTpagCount) {
+    for (uint32_t i = originalTpagCount; dw->tpag.count > i; i++) {
+        if (dw->tpag.items[i].texturePageId == -1) return i;
+    }
+    uint32_t newIndex = dw->tpag.count;
+    dw->tpag.count++;
+    dw->tpag.items = realloc(dw->tpag.items, dw->tpag.count * sizeof(TexturePageItem));
+    memset(&dw->tpag.items[newIndex], 0, sizeof(TexturePageItem));
+    dw->tpag.items[newIndex].texturePageId = -1;
+    return newIndex;
+}
+
+// Finds a free dynamic Sprite slot (textureCount == 0), or appends a new one.
+static uint32_t findOrAllocSpriteSlot(DataWin* dw, uint32_t originalSpriteCount) {
+    for (uint32_t i = originalSpriteCount; dw->sprt.count > i; i++) {
+        if (dw->sprt.sprites[i].textureCount == 0) return i;
+    }
+    uint32_t newIndex = dw->sprt.count;
+    dw->sprt.count++;
+    dw->sprt.sprites = realloc(dw->sprt.sprites, dw->sprt.count * sizeof(Sprite));
+    memset(&dw->sprt.sprites[newIndex], 0, sizeof(Sprite));
+    return newIndex;
+}
+
+static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t y, int32_t w, int32_t h, bool removeback, bool smooth, int32_t xorig, int32_t yorig) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+    DataWin* dw = renderer->dataWin;
+
+    if (0 >= w || 0 >= h) return -1;
+
+    // Flush any pending draws before reading pixels
+    flushBatch(gl);
+
+    // Read pixels from the FBO (application_surface)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
+
+    uint8_t* pixels = malloc((size_t) w * (size_t) h * 4);
+    if (pixels == nullptr) return -1;
+
+    // OpenGL Y is bottom-up, GML Y is top-down, so flip the Y coordinate
+    int32_t glY = gl->fboHeight - y - h;
+    glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    // Flip vertically (OpenGL reads bottom-to-top)
+    size_t rowBytes = (size_t) w * 4;
+    uint8_t* rowTemp = malloc(rowBytes);
+    repeat(h / 2, row) {
+        uint8_t* top = pixels + row * rowBytes;
+        uint8_t* bot = pixels + (h - 1 - row) * rowBytes;
+        memcpy(rowTemp, top, rowBytes);
+        memcpy(top, bot, rowBytes);
+        memcpy(bot, rowTemp, rowBytes);
+    }
+    free(rowTemp);
+
+    // Create a new GL texture from the captured pixels
+    GLuint newTexId;
+    glGenTextures(1, &newTexId);
+    glBindTexture(GL_TEXTURE_2D, newTexId);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, smooth ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, smooth ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    free(pixels);
+
+    // Find or allocate slots for texture page, TPAG, and sprite
+    uint32_t pageId = findOrAllocTexturePageSlot(gl);
+    gl->glTextures[pageId] = newTexId;
+    gl->textureWidths[pageId] = w;
+    gl->textureHeights[pageId] = h;
+
+    uint32_t tpagIndex = findOrAllocTpagSlot(dw, gl->originalTpagCount);
+    TexturePageItem* tpag = &dw->tpag.items[tpagIndex];
+    tpag->sourceX = 0;
+    tpag->sourceY = 0;
+    tpag->sourceWidth = (uint16_t) w;
+    tpag->sourceHeight = (uint16_t) h;
+    tpag->targetX = 0;
+    tpag->targetY = 0;
+    tpag->targetWidth = (uint16_t) w;
+    tpag->targetHeight = (uint16_t) h;
+    tpag->boundingWidth = (uint16_t) w;
+    tpag->boundingHeight = (uint16_t) h;
+    tpag->texturePageId = (int16_t) pageId;
+
+    // Register a fake offset in the tpagOffsetMap so DataWin_resolveTPAG works
+    uint32_t fakeOffset = DYNAMIC_TPAG_OFFSET_BASE + tpagIndex;
+    hmput(dw->tpagOffsetMap, fakeOffset, (int32_t) tpagIndex);
+
+    uint32_t spriteIndex = findOrAllocSpriteSlot(dw, gl->originalSpriteCount);
+    Sprite* sprite = &dw->sprt.sprites[spriteIndex];
+    sprite->name = "dynamic_sprite";
+    sprite->width = (uint32_t) w;
+    sprite->height = (uint32_t) h;
+    sprite->originX = xorig;
+    sprite->originY = yorig;
+    sprite->textureCount = 1;
+    sprite->textureOffsets = malloc(sizeof(uint32_t));
+    sprite->textureOffsets[0] = fakeOffset;
+    sprite->maskCount = 0;
+    sprite->masks = nullptr;
+
+    fprintf(stderr, "GL: Created dynamic sprite %u (%dx%d) from surface at (%d,%d)\n", spriteIndex, w, h, x, y);
+    return (int32_t) spriteIndex;
+}
+
+static void glDeleteSprite(Renderer* renderer, int32_t spriteIndex) {
+    GLRenderer* gl = (GLRenderer*) renderer;
+    DataWin* dw = renderer->dataWin;
+
+    if (0 > spriteIndex || dw->sprt.count <= (uint32_t) spriteIndex) return;
+
+    // Refuse to delete original data.win sprites
+    if (gl->originalSpriteCount > (uint32_t) spriteIndex) {
+        fprintf(stderr, "GL: Cannot delete data.win sprite %d\n", spriteIndex);
+        return;
+    }
+
+    Sprite* sprite = &dw->sprt.sprites[spriteIndex];
+    if (sprite->textureCount == 0) return; // already deleted
+
+    // Clean up GL texture, TPAG entries, and tpagOffsetMap entries
+    repeat(sprite->textureCount, i) {
+        uint32_t offset = sprite->textureOffsets[i];
+        if (offset >= DYNAMIC_TPAG_OFFSET_BASE) {
+            int32_t tpagIdx = DataWin_resolveTPAG(dw, offset);
+            if (tpagIdx >= 0) {
+                TexturePageItem* tpag = &dw->tpag.items[tpagIdx];
+                int16_t pageId = tpag->texturePageId;
+                if (pageId >= 0 && gl->textureCount > (uint32_t) pageId) {
+                    glDeleteTextures(1, &gl->glTextures[pageId]);
+                    gl->glTextures[pageId] = 0;
+                }
+                // Mark TPAG slot as free for reuse
+                tpag->texturePageId = -1;
+            }
+            // Remove the fake offset from the lookup map
+            hmdel(dw->tpagOffsetMap, offset);
+        }
+    }
+
+    // Clear the sprite entry so it won't be drawn and can be reused
+    free(sprite->textureOffsets);
+    memset(sprite, 0, sizeof(Sprite));
+
+    fprintf(stderr, "GL: Deleted sprite %d\n", spriteIndex);
+}
+
 // ===[ Vtable ]===
 
 static RendererVtable glVtable = {
@@ -725,6 +907,8 @@ static RendererVtable glVtable = {
     .drawLine = glDrawLine,
     .drawText = glDrawText,
     .flush = glRendererFlush,
+    .createSpriteFromSurface = glCreateSpriteFromSurface,
+    .deleteSprite = glDeleteSprite,
 };
 
 // ===[ Public API ]===

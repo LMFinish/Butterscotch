@@ -2223,6 +2223,35 @@ STUB_RETURN_ZERO(sprite_get_number)
 STUB_RETURN_ZERO(sprite_get_xoffset)
 STUB_RETURN_ZERO(sprite_get_yoffset)
 
+// sprite_create_from_surface(surface_id, x, y, w, h, removeback, smooth, xorig, yorig)
+static RValue builtin_spriteCreateFromSurface(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr || runner->renderer->vtable->createSpriteFromSurface == nullptr) return RValue_makeReal(-1);
+
+    // surface_id (arg0) is ignored - we always capture from the application surface (FBO)
+    int32_t x = RValue_toInt32(args[1]);
+    int32_t y = RValue_toInt32(args[2]);
+    int32_t w = RValue_toInt32(args[3]);
+    int32_t h = RValue_toInt32(args[4]);
+    bool removeback = RValue_toBool(args[5]);
+    bool smooth = RValue_toBool(args[6]);
+    int32_t xorig = RValue_toInt32(args[7]);
+    int32_t yorig = RValue_toInt32(args[8]);
+
+    int32_t result = runner->renderer->vtable->createSpriteFromSurface(runner->renderer, x, y, w, h, removeback, smooth, xorig, yorig);
+    return RValue_makeReal((double) result);
+}
+
+// sprite_delete(sprite_index)
+static RValue builtin_spriteDelete(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr || runner->renderer->vtable->deleteSprite == nullptr) return RValue_makeUndefined();
+
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    runner->renderer->vtable->deleteSprite(runner->renderer, spriteIndex);
+    return RValue_makeUndefined();
+}
+
 // Font/text measurement
 static RValue builtin_stringWidth(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
@@ -2992,6 +3021,8 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("sprite_get_number", builtin_sprite_get_number);
     registerBuiltin("sprite_get_xoffset", builtin_sprite_get_xoffset);
     registerBuiltin("sprite_get_yoffset", builtin_sprite_get_yoffset);
+    registerBuiltin("sprite_create_from_surface", builtin_spriteCreateFromSurface);
+    registerBuiltin("sprite_delete", builtin_spriteDelete);
 
     // Text measurement
     registerBuiltin("string_width", builtin_stringWidth);

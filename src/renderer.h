@@ -23,6 +23,8 @@ typedef struct {
     void (*drawLine)(Renderer* renderer, float x1, float y1, float x2, float y2, float width, uint32_t color, float alpha);
     void (*drawText)(Renderer* renderer, const char* text, float x, float y, float xscale, float yscale, float angleDeg);
     void (*flush)(Renderer* renderer);
+    int32_t (*createSpriteFromSurface)(Renderer* renderer, int32_t x, int32_t y, int32_t w, int32_t h, bool removeback, bool smooth, int32_t xorig, int32_t yorig);
+    void (*deleteSprite)(Renderer* renderer, int32_t spriteIndex);
 } RendererVtable;
 
 // ===[ Renderer Base Struct ]===

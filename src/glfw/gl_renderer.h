@@ -34,6 +34,11 @@ typedef struct {
     int32_t windowH;
     int32_t gameW; // game resolution (for FBO sizing)
     int32_t gameH;
+
+    // Original counts from data.win (dynamic slots start at these indices)
+    uint32_t originalTexturePageCount;
+    uint32_t originalTpagCount;
+    uint32_t originalSpriteCount;
 } GLRenderer;
 
 Renderer* GLRenderer_create(void);
