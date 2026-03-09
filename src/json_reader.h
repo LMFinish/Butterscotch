@@ -49,11 +49,11 @@ const char* JsonReader_getString(const JsonValue* value);
 // ===[ Array Access ]===
 
 int JsonReader_arrayLength(const JsonValue* value);
-JsonValue* JsonReader_arrayGet(const JsonValue* value, int index);
+JsonValue* JsonReader_getArrayElement(const JsonValue* value, int index);
 
 // ===[ Object Access ]===
 
 int JsonReader_objectLength(const JsonValue* value);
-JsonValue* JsonReader_objectGet(const JsonValue* value, const char* key);
-const char* JsonReader_objectGetKey(const JsonValue* value, int index);
-JsonValue* JsonReader_objectGetValue(const JsonValue* value, int index);
+JsonValue* JsonReader_getObject(const JsonValue* value, const char* key);
+const char* JsonReader_getObjectKey(const JsonValue* value, int index);
+JsonValue* JsonReader_getObjectValue(const JsonValue* value, int index);
