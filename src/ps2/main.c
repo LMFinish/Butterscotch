@@ -1,19 +1,73 @@
 #include <kernel.h>
 #include <sifrpc.h>
+#include <loadfile.h>
 #include <stdio.h>
 #include <malloc.h>
 #include <dmaKit.h>
 #include <gsKit.h>
 #include <gsToolkit.h>
+#include <libpad.h>
 
 #include "runner.h"
+#include "runner_keyboard.h"
 #include "vm.h"
 #include "../data_win.h"
 #include "gs_renderer.h"
 #include "utils.h"
 
+// 256-byte aligned buffer for libpad
+static char padBuf[256] __attribute__((aligned(64)));
+
+// Controller button to GML key mapping
+typedef struct {
+    uint16_t padButton;
+    int32_t gmlKey;
+} PadMapping;
+
+static const PadMapping PAD_MAPPINGS[] = {
+    { PAD_UP,       VK_UP },
+    { PAD_DOWN,     VK_DOWN },
+    { PAD_LEFT,     VK_LEFT },
+    { PAD_RIGHT,    VK_RIGHT },
+    { PAD_CROSS,    'Z' },
+    { PAD_CIRCLE,   'X' },
+    { PAD_START,    'C' },
+    { PAD_TRIANGLE, VK_ESCAPE },
+    { PAD_L1, VK_PAGEDOWN },
+    { PAD_R1, VK_PAGEUP },
+};
+
+static const int PAD_MAPPING_COUNT = sizeof(PAD_MAPPINGS) / sizeof(PAD_MAPPINGS[0]);
+
+// Previous frame's button state for detecting press/release edges
+static uint16_t prevButtons = 0xFFFF; // All buttons released (buttons are active-low)
+
 int main(int argc, char* argv[]) {
     SifInitRpc(0);
+
+    // ===[ Initialize Controller ]===
+    int ret;
+    ret = SifLoadModule("rom0:SIO2MAN", 0, nullptr);
+    if (0 > ret) {
+        printf("Failed to load SIO2MAN: %d\n", ret);
+        return 1;
+    }
+    ret = SifLoadModule("rom0:PADMAN", 0, nullptr);
+    if (0 > ret) {
+        printf("Failed to load PADMAN: %d\n", ret);
+        return 1;
+    }
+
+    padInit(0);
+    padPortOpen(0, 0, padBuf);
+
+    // Wait for pad to be ready
+    int padState;
+    do {
+        padState = padGetState(0, 0);
+    } while (PAD_STATE_STABLE != padState && PAD_STATE_FINDCTP1 != padState);
+
+    printf("Controller initialized\n");
 
     const char* dataWinPath = "host:data.win";
     if (argc > 1) {
@@ -102,6 +156,52 @@ int main(int argc, char* argv[]) {
     while (!runner->shouldExit) {
         struct mallinfo mi = mallinfo();
         printf("Memory: used=%d bytes (%.1f KB), free=%d bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f, mi.fordblks, mi.fordblks / 1024.0f);
+
+        // ===[ Poll Controller ]===
+        RunnerKeyboard_beginFrame(runner->keyboard);
+
+        struct padButtonStatus padStatus;
+        unsigned char padResult = padRead(0, 0, &padStatus);
+        if (padResult != 0) {
+            uint16_t buttons = padStatus.btns;
+
+            for (int i = 0; PAD_MAPPING_COUNT > i; i++) {
+                uint16_t mask = PAD_MAPPINGS[i].padButton;
+                int32_t gmlKey = PAD_MAPPINGS[i].gmlKey;
+
+                // PS2 buttons are active-low: 0 = pressed, 1 = released
+                bool wasPressed = (prevButtons & mask) == 0;
+                bool isPressed = (buttons & mask) == 0;
+
+                if (isPressed && !wasPressed) {
+                    RunnerKeyboard_onKeyDown(runner->keyboard, gmlKey);
+                } else if (!isPressed && wasPressed) {
+                    RunnerKeyboard_onKeyUp(runner->keyboard, gmlKey);
+                }
+            }
+
+            prevButtons = buttons;
+        }
+
+        // Go to next room
+        if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEUP)) {
+            DataWin* dw = runner->dataWin;
+            if ((int32_t) dw->gen8.roomOrderCount > runner->currentRoomOrderPosition + 1) {
+                int32_t nextIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition + 1];
+                runner->pendingRoom = nextIdx;
+                fprintf(stderr, "Debug: Going to next room -> %s\n", dw->room.rooms[nextIdx].name);
+            }
+        }
+
+        // Go to previous room
+        if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEDOWN)) {
+            DataWin* dw = runner->dataWin;
+            if (runner->currentRoomOrderPosition > 0) {
+                int32_t prevIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition - 1];
+                runner->pendingRoom = prevIdx;
+                fprintf(stderr, "Debug: Going to previous room -> %s\n", dw->room.rooms[prevIdx].name);
+            }
+        }
 
         // Run one game step
         Runner_step(runner);
