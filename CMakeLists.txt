@@ -36,8 +36,11 @@ if(PLATFORM STREQUAL "glfw")
 
     # Enable useful things to figure out when things have gone wrong related to memory corruption
     # (Also set -DCMAKE_BUILD_TYPE=Debug to get debug symbols!)
-    target_compile_options(butterscotch PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-    target_link_options(butterscotch PRIVATE -fsanitize=address)
+    set(ENABLE_ASAN OFF CACHE BOOL "Enable AddressSanitizer")
+    if(ENABLE_ASAN)
+        target_compile_options(butterscotch PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(butterscotch PRIVATE -fsanitize=address)
+    endif()
 elseif(PLATFORM STREQUAL "ps2")
     if(PS2)
         # Compiling on the Docker container
