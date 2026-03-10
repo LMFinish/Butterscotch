@@ -1,4 +1,5 @@
 #include "binary_reader.h"
+#include "utils.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +68,7 @@ void BinaryReader_readBytes(BinaryReader* reader, void* dest, size_t count) {
 }
 
 uint8_t* BinaryReader_readBytesAt(BinaryReader* reader, size_t offset, size_t count) {
-    uint8_t* buf = malloc(count);
+    uint8_t* buf = safeMalloc(count);
     long savedPos = ftell(reader->file);
     fseek(reader->file, (long) offset, SEEK_SET);
     readCheck(reader, buf, count);

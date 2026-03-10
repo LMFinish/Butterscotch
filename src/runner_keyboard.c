@@ -1,4 +1,5 @@
 #include "runner_keyboard.h"
+#include "utils.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +9,7 @@ static bool isValidKey(int32_t key) {
 }
 
 RunnerKeyboardState* RunnerKeyboard_create(void) {
-    RunnerKeyboardState* kb = calloc(1, sizeof(RunnerKeyboardState));
+    RunnerKeyboardState* kb = safeCalloc(1, sizeof(RunnerKeyboardState));
     kb->lastKey = VK_NOKEY;
     return kb;
 }

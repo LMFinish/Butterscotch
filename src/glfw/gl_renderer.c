@@ -125,7 +125,7 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
 
     // EBO: pre-fill with quad index pattern (0,1,2,2,3,0 repeated)
     int32_t eboSize = MAX_QUADS * INDICES_PER_QUAD * (int32_t) sizeof(uint32_t);
-    uint32_t* indices = malloc(eboSize);
+    uint32_t* indices = safeMalloc(eboSize);
     for (int32_t i = 0; MAX_QUADS > i; i++) {
         uint32_t base = (uint32_t) i * 4;
         indices[i * 6 + 0] = base + 0;
@@ -151,13 +151,13 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     glBindVertexArray(0);
 
     // Allocate CPU-side vertex buffer
-    gl->vertexData = malloc(MAX_QUADS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * sizeof(float));
+    gl->vertexData = safeMalloc(MAX_QUADS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * sizeof(float));
 
     // Load textures from TXTR pages
     gl->textureCount = dataWin->txtr.count;
-    gl->glTextures = malloc(gl->textureCount * sizeof(GLuint));
-    gl->textureWidths = malloc(gl->textureCount * sizeof(int32_t));
-    gl->textureHeights = malloc(gl->textureCount * sizeof(int32_t));
+    gl->glTextures = safeMalloc(gl->textureCount * sizeof(GLuint));
+    gl->textureWidths = safeMalloc(gl->textureCount * sizeof(int32_t));
+    gl->textureHeights = safeMalloc(gl->textureCount * sizeof(int32_t));
 
     glGenTextures((GLsizei) gl->textureCount, gl->glTextures);
 
@@ -732,9 +732,9 @@ static uint32_t findOrAllocTexturePageSlot(GLRenderer* gl) {
     // No free slot found, grow the arrays
     uint32_t newPageId = gl->textureCount;
     gl->textureCount++;
-    gl->glTextures = realloc(gl->glTextures, gl->textureCount * sizeof(GLuint));
-    gl->textureWidths = realloc(gl->textureWidths, gl->textureCount * sizeof(int32_t));
-    gl->textureHeights = realloc(gl->textureHeights, gl->textureCount * sizeof(int32_t));
+    gl->glTextures = safeRealloc(gl->glTextures, gl->textureCount * sizeof(GLuint));
+    gl->textureWidths = safeRealloc(gl->textureWidths, gl->textureCount * sizeof(int32_t));
+    gl->textureHeights = safeRealloc(gl->textureHeights, gl->textureCount * sizeof(int32_t));
     gl->glTextures[newPageId] = 0;
     gl->textureWidths[newPageId] = 0;
     gl->textureHeights[newPageId] = 0;
@@ -748,7 +748,7 @@ static uint32_t findOrAllocTpagSlot(DataWin* dw, uint32_t originalTpagCount) {
     }
     uint32_t newIndex = dw->tpag.count;
     dw->tpag.count++;
-    dw->tpag.items = realloc(dw->tpag.items, dw->tpag.count * sizeof(TexturePageItem));
+    dw->tpag.items = safeRealloc(dw->tpag.items, dw->tpag.count * sizeof(TexturePageItem));
     memset(&dw->tpag.items[newIndex], 0, sizeof(TexturePageItem));
     dw->tpag.items[newIndex].texturePageId = -1;
     return newIndex;
@@ -761,7 +761,7 @@ static uint32_t findOrAllocSpriteSlot(DataWin* dw, uint32_t originalSpriteCount)
     }
     uint32_t newIndex = dw->sprt.count;
     dw->sprt.count++;
-    dw->sprt.sprites = realloc(dw->sprt.sprites, dw->sprt.count * sizeof(Sprite));
+    dw->sprt.sprites = safeRealloc(dw->sprt.sprites, dw->sprt.count * sizeof(Sprite));
     memset(&dw->sprt.sprites[newIndex], 0, sizeof(Sprite));
     return newIndex;
 }
@@ -778,7 +778,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t 
     // Read pixels from the FBO (application_surface)
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
 
-    uint8_t* pixels = malloc((size_t) w * (size_t) h * 4);
+    uint8_t* pixels = safeMalloc((size_t) w * (size_t) h * 4);
     if (pixels == nullptr) return -1;
 
     // OpenGL Y is bottom-up, GML Y is top-down, so flip the Y coordinate
@@ -787,7 +787,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t 
 
     // Flip vertically (OpenGL reads bottom-to-top)
     size_t rowBytes = (size_t) w * 4;
-    uint8_t* rowTemp = malloc(rowBytes);
+    uint8_t* rowTemp = safeMalloc(rowBytes);
     repeat(h / 2, row) {
         uint8_t* top = pixels + row * rowBytes;
         uint8_t* bot = pixels + (h - 1 - row) * rowBytes;
@@ -841,7 +841,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t 
     sprite->originX = xorig;
     sprite->originY = yorig;
     sprite->textureCount = 1;
-    sprite->textureOffsets = malloc(sizeof(uint32_t));
+    sprite->textureOffsets = safeMalloc(sizeof(uint32_t));
     sprite->textureOffsets[0] = fakeOffset;
     sprite->maskCount = 0;
     sprite->masks = nullptr;
@@ -914,7 +914,7 @@ static RendererVtable glVtable = {
 // ===[ Public API ]===
 
 Renderer* GLRenderer_create(void) {
-    GLRenderer* gl = calloc(1, sizeof(GLRenderer));
+    GLRenderer* gl = safeCalloc(1, sizeof(GLRenderer));
     gl->base.vtable = &glVtable;
     gl->base.drawColor = 0xFFFFFF; // white (BGR)
     gl->base.drawAlpha = 1.0f;

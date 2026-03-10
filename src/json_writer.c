@@ -1,4 +1,5 @@
 #include "json_writer.h"
+#include "utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,7 @@ static void ensureCapacity(JsonWriter* writer, size_t additional) {
         newCapacity *= 2;
     }
 
-    writer->buffer = realloc(writer->buffer, newCapacity);
+    writer->buffer = safeRealloc(writer->buffer, newCapacity);
     if (writer->buffer == nullptr) {
         fprintf(stderr, "JsonWriter: realloc failed\n");
         abort();
@@ -76,7 +77,7 @@ static void writeEscapedString(JsonWriter* writer, const char* str) {
 
 JsonWriter JsonWriter_create(void) {
     size_t initialCapacity = 256;
-    char* buffer = malloc(initialCapacity);
+    char* buffer = safeMalloc(initialCapacity);
     if (buffer == nullptr) {
         fprintf(stderr, "JsonWriter: malloc failed\n");
         abort();

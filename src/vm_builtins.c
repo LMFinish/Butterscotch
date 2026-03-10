@@ -691,7 +691,7 @@ static RValue builtinStringCopy([[maybe_unused]] VMContext* ctx, RValue* args, i
     if (pos >= strLen || 0 >= len) return RValue_makeOwnedString(strdup(""));
     if (pos + len > strLen) len = strLen - pos;
 
-    char* result = malloc(len + 1);
+    char* result = safeMalloc(len + 1);
     memcpy(result, str + pos, len);
     result[len] = '\0';
     return RValue_makeOwnedString(result);
@@ -739,7 +739,7 @@ static RValue builtinStringDelete([[maybe_unused]] VMContext* ctx, RValue* args,
     if (0 > pos || pos >= strLen || 0 >= count) return RValue_makeOwnedString(strdup(str));
     if (pos + count > strLen) count = strLen - pos;
 
-    char* result = malloc(strLen - count + 1);
+    char* result = safeMalloc(strLen - count + 1);
     memcpy(result, str, pos);
     memcpy(result + pos, str + pos + count, strLen - pos - count);
     result[strLen - count] = '\0';
@@ -757,7 +757,7 @@ static RValue builtinStringInsert([[maybe_unused]] VMContext* ctx, RValue* args,
     if (0 > pos) pos = 0;
     if (pos > strLen) pos = strLen;
 
-    char* result = malloc(strLen + subLen + 1);
+    char* result = safeMalloc(strLen + subLen + 1);
     memcpy(result, str, pos);
     memcpy(result + pos, substr, subLen);
     memcpy(result + pos + subLen, str + pos, strLen - pos);
@@ -781,7 +781,7 @@ static RValue builtinStringReplaceAll([[maybe_unused]] VMContext* ctx, RValue* a
 
     int32_t strLen = (int32_t) strlen(str);
     int32_t resultLen = strLen + count * (replacementLen - needleLen);
-    char* result = malloc(resultLen + 1);
+    char* result = safeMalloc(resultLen + 1);
     char* out = result;
     p = str;
     const char* match;

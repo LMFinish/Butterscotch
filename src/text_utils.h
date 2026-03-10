@@ -85,7 +85,7 @@ static inline float TextUtils_measureLineWidth(Font* font, const char* line, int
 // Returns a heap-allocated string that must be freed by the caller.
 static inline char* TextUtils_preprocessGmlText(const char* text) {
     int32_t len = (int32_t) strlen(text);
-    char* result = malloc(len + 1);
+    char* result = safeMalloc(len + 1);
     int32_t out = 0;
 
     repeat(len, i) {

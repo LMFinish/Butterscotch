@@ -1059,7 +1059,7 @@ static void handleAdd(VMContext* ctx) {
         const char* sb = b.string != nullptr ? b.string : "";
         size_t lenA = strlen(sa);
         size_t lenB = strlen(sb);
-        char* result = malloc(lenA + lenB + 1);
+        char* result = safeMalloc(lenA + lenB + 1);
         memcpy(result, sa, lenA);
         memcpy(result + lenA, sb, lenB + 1);
         RValue_free(&a);
@@ -1071,7 +1071,7 @@ static void handleAdd(VMContext* ctx) {
         char* sb = RValue_toString(b);
         size_t lenA = strlen(sa);
         size_t lenB = strlen(sb);
-        char* result = malloc(lenA + lenB + 1);
+        char* result = safeMalloc(lenA + lenB + 1);
         memcpy(result, sa, lenA);
         memcpy(result + lenA, sb, lenB + 1);
         free(sa);
@@ -1120,7 +1120,7 @@ static void handleMul(VMContext* ctx) {
             RValue_free(&b);
             stackPush(ctx,RValue_makeOwnedString(strdup("")));
         } else {
-            char* result = malloc(len * count + 1);
+            char* result = safeMalloc(len * count + 1);
             repeat(count, i) {
                 memcpy(result + i * len, str, len);
             }
@@ -1424,7 +1424,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     // Pop arguments from stack (args pushed right-to-left, so first arg is on top)
     RValue* args = nullptr;
     if (argCount > 0) {
-        args = malloc(argCount * sizeof(RValue));
+        args = safeMalloc(argCount * sizeof(RValue));
         repeat(argCount, i) {
             args[i] = stackPop(ctx);
         }
@@ -1438,7 +1438,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
             char* display = RValue_toStringFancy(args[i]);
 
             if (i > 0) {
-                char* tmp = malloc(strlen(functionArgumentList) + 2 + strlen(display) + 1);
+                char* tmp = safeMalloc(strlen(functionArgumentList) + 2 + strlen(display) + 1);
                 sprintf(tmp, "%s, %s", functionArgumentList, display);
                 free(functionArgumentList);
                 functionArgumentList = tmp;
@@ -1560,7 +1560,7 @@ static void handlePushEnv(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
     RValue_free(&targetVal);
 
     // Create env frame, save current context
-    EnvFrame* frame = malloc(sizeof(EnvFrame));
+    EnvFrame* frame = safeMalloc(sizeof(EnvFrame));
     frame->savedSelfVars = ctx->selfVars;
     frame->savedSelfVarCount = ctx->selfVarCount;
     frame->savedInstance = (Instance*) ctx->currentInstance;
@@ -1877,7 +1877,7 @@ static RValue executeLoop(VMContext* ctx) {
 // ===[ Public API ]===
 
 VMContext* VM_create(DataWin* dataWin) {
-    VMContext* ctx = calloc(1, sizeof(VMContext));
+    VMContext* ctx = safeCalloc(1, sizeof(VMContext));
     ctx->dataWin = dataWin;
     ctx->stack.top = 0;
     ctx->selfId = -1;
@@ -1904,13 +1904,13 @@ VMContext* VM_create(DataWin* dataWin) {
     }
 
     ctx->globalVarCount = maxGlobalVarID;
-    ctx->globalVars = calloc(maxGlobalVarID, sizeof(RValue));
+    ctx->globalVars = safeCalloc(maxGlobalVarID, sizeof(RValue));
     repeat(maxGlobalVarID, i) {
         ctx->globalVars[i].type = RVALUE_UNDEFINED;
     }
 
     ctx->selfVarCount = maxSelfVarID;
-    ctx->selfVars = calloc(maxSelfVarID, sizeof(RValue));
+    ctx->selfVars = safeCalloc(maxSelfVarID, sizeof(RValue));
     repeat(maxSelfVarID, i) {
         ctx->selfVars[i].type = RVALUE_UNDEFINED;
     }
@@ -1983,7 +1983,7 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     // Allocate locals
     uint32_t localsCount = code->localsCount;
     if (localsCount == 0) localsCount = 1; // at least 1 slot to avoid nullptr
-    ctx->localVars = calloc(localsCount, sizeof(RValue));
+    ctx->localVars = safeCalloc(localsCount, sizeof(RValue));
     ctx->localVarCount = localsCount;
     ctx->localArrayMap = nullptr;
     repeat(localsCount, i) {
@@ -2031,7 +2031,7 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     }
 
     // Save current frame
-    CallFrame* frame = malloc(sizeof(CallFrame));
+    CallFrame* frame = safeMalloc(sizeof(CallFrame));
     frame->savedIP = ctx->ip;
     frame->savedCodeEnd = ctx->codeEnd;
     frame->savedBytecodeBase = ctx->bytecodeBase;
@@ -2054,7 +2054,7 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
 
     uint32_t localsCount = code->localsCount;
     if (localsCount == 0) localsCount = 1;
-    ctx->localVars = calloc(localsCount, sizeof(RValue));
+    ctx->localVars = safeCalloc(localsCount, sizeof(RValue));
     ctx->localVarCount = localsCount;
     repeat(localsCount, i) {
         ctx->localVars[i].type = RVALUE_UNDEFINED;
@@ -2063,7 +2063,7 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     // Store arguments in scriptArgs (mirrors GMS 1.4's global argument stack)
     ctx->scriptArgCount = argCount;
     if (argCount > 0 && args != nullptr) {
-        ctx->scriptArgs = malloc((uint32_t) argCount * sizeof(RValue));
+        ctx->scriptArgs = safeMalloc((uint32_t) argCount * sizeof(RValue));
         repeat(argCount, argIdx) {
             RValue argCopy = args[argIdx];
             if (argCopy.type == RVALUE_STRING && argCopy.ownsString && argCopy.string != nullptr) {

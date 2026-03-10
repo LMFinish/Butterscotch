@@ -8,7 +8,7 @@
 #include "utils.h"
 
 Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, double x, double y, uint32_t selfVarCount) {
-    Instance* inst = calloc(1, sizeof(Instance));
+    Instance* inst = safeCalloc(1, sizeof(Instance));
     inst->instanceId = instanceId;
     inst->objectIndex = objectIndex;
     inst->x = x;
@@ -52,7 +52,7 @@ Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, double x, do
     // Allocate self vars
     inst->selfVarCount = selfVarCount;
     if (selfVarCount > 0) {
-        inst->selfVars = calloc(selfVarCount, sizeof(RValue));
+        inst->selfVars = safeCalloc(selfVarCount, sizeof(RValue));
         for (uint32_t i = 0; selfVarCount > i; i++) {
             inst->selfVars[i].type = RVALUE_UNDEFINED;
         }

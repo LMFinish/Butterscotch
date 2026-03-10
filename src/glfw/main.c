@@ -267,7 +267,7 @@ static void captureScreenshot(const char* filenamePattern, int frameNumber, int 
     snprintf(filename, sizeof(filename), filenamePattern, frameNumber);
 
     int stride = width * 4;
-    unsigned char* pixels = malloc(stride * height);
+    unsigned char* pixels = safeMalloc(stride * height);
     if (pixels == nullptr) {
         fprintf(stderr, "Error: Failed to allocate memory for screenshot (%dx%d)\n", width, height);
         return;
@@ -377,7 +377,7 @@ int main(int argc, char* argv[]) {
             .parseStrg = true,
             .parseTxtr = true,
             .parseAudo = true,
-            .skipLoadingPreciseMasksForNonPreciseSprites = false
+            .skipLoadingPreciseMasksForNonPreciseSprites = true
         }
     );
 

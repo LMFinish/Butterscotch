@@ -1,5 +1,9 @@
 #pragma once
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+
 #define forEach(type, item, array, count) type* item; for (typeof(count) _i = 0; _i < (count) && ((item) = &(array)[_i], 1); _i++)
 
 #define forEachIndexed(type, item, index, array, count) type* item; for (typeof(count) index = 0; index < (count) && ((item) = &(array)[index], 1); index++)
@@ -40,6 +44,34 @@ fprintf(stderr, "%s:%d: requireNotNull failed: %s\n", __FILE__, __LINE__, (msg))
 abort(); \
 } \
 _val; \
+})
+
+// Safe allocation macros - check for nullptr and abort with file/line info
+#define safeMalloc(size) ({ \
+    void* _ptr = malloc(size); \
+    if (_ptr == nullptr) { \
+        fprintf(stderr, "FATAL: malloc(%zu) failed at %s:%d\n", (size_t)(size), __FILE__, __LINE__); \
+        abort(); \
+    } \
+    _ptr; \
+})
+
+#define safeCalloc(count, size) ({ \
+    void* _ptr = calloc(count, size); \
+    if (_ptr == nullptr) { \
+        fprintf(stderr, "FATAL: calloc(%zu, %zu) failed at %s:%d\n", (size_t)(count), (size_t)(size), __FILE__, __LINE__); \
+        abort(); \
+    } \
+    _ptr; \
+})
+
+#define safeRealloc(ptr, size) ({ \
+    void* _ptr = realloc(ptr, size); \
+    if (_ptr == nullptr) { \
+        fprintf(stderr, "FATAL: realloc(%zu) failed at %s:%d\n", (size_t)(size), __FILE__, __LINE__); \
+        abort(); \
+    } \
+    _ptr; \
 })
 
 // Truncates to 6 decimal places, matching the HTML5 runner's ClampFloat

@@ -190,7 +190,7 @@ static const char* VM_getCallerName(VMContext* ctx) {
 static char* VM_createDedupKey(const char* callerName, const char* funcName) {
     // Build dedup key: "callerName\tfuncName"
     size_t keyLen = strlen(callerName) + 1 + strlen(funcName) + 1;
-    char* dedupKey = malloc(keyLen);
+    char* dedupKey = safeMalloc(keyLen);
     snprintf(dedupKey, keyLen, "%s\t%s", callerName, funcName);
     return dedupKey;
 }

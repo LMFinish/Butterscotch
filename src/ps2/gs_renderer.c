@@ -311,7 +311,7 @@ static RendererVtable gsVtable = {
 };
 
 Renderer* GsRenderer_create(GSGLOBAL* gsGlobal) {
-    GsRenderer* gs = calloc(1, sizeof(GsRenderer));
+    GsRenderer* gs = safeCalloc(1, sizeof(GsRenderer));
     gs->base.vtable = &gsVtable;
     gs->gsGlobal = gsGlobal;
     gs->scaleX = 2.0f;

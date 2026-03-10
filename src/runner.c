@@ -88,7 +88,7 @@ static void executeCode(Runner* runner, Instance* instance, int32_t codeId) {
     // the nested execution overwrite the caller's stack slot values)
     RValue* savedStackValues = nullptr;
     if (savedStackTop > 0) {
-        savedStackValues = malloc((uint32_t) savedStackTop * sizeof(RValue));
+        savedStackValues = safeMalloc((uint32_t) savedStackTop * sizeof(RValue));
         memcpy(savedStackValues, vm->stack.slots, (uint32_t) savedStackTop * sizeof(RValue));
     }
 
@@ -616,7 +616,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
 // ===[ Public API ]===
 
 Runner* Runner_create(DataWin* dataWin, VMContext* vm) {
-    Runner* runner = calloc(1, sizeof(Runner));
+    Runner* runner = safeCalloc(1, sizeof(Runner));
     runner->dataWin = dataWin;
     runner->vmContext = vm;
     runner->frameCount = 0;
@@ -627,7 +627,7 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm) {
     runner->currentRoomOrderPosition = -1;
     runner->nextInstanceId = dataWin->gen8.lastObj + 1;
     runner->keyboard = RunnerKeyboard_create();
-    runner->savedRoomStates = calloc(dataWin->room.count, sizeof(SavedRoomState));
+    runner->savedRoomStates = safeCalloc(dataWin->room.count, sizeof(SavedRoomState));
 
     // Link runner to VM context
     vm->runner = (struct Runner*) runner;

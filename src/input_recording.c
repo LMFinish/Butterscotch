@@ -11,7 +11,7 @@
 #include "stb_ds.h"
 
 InputRecording* InputRecording_createRecorder(const char* filePath) {
-    InputRecording* rec = calloc(1, sizeof(InputRecording));
+    InputRecording* rec = safeCalloc(1, sizeof(InputRecording));
     rec->isRecording = true;
     rec->recordFilePath = filePath;
     return rec;
@@ -29,7 +29,7 @@ InputRecording* InputRecording_createPlayer(const char* playbackFilePath, const 
     long fileSize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char* contents = malloc(fileSize + 1);
+    char* contents = safeMalloc(fileSize + 1);
     fread(contents, 1, fileSize, f);
     contents[fileSize] = '\0';
     fclose(f);
@@ -52,7 +52,7 @@ InputRecording* InputRecording_createPlayer(const char* playbackFilePath, const 
         if (frameNum > maxFrame) maxFrame = frameNum;
     }
 
-    InputRecording* rec = calloc(1, sizeof(InputRecording));
+    InputRecording* rec = safeCalloc(1, sizeof(InputRecording));
     rec->isPlayback = true;
     rec->playbackFrameCount = maxFrame + 1;
 
@@ -63,7 +63,7 @@ InputRecording* InputRecording_createPlayer(const char* playbackFilePath, const 
     }
 
     // Allocate playbackFrames array (one stb_ds int32_t array per frame)
-    rec->playbackFrames = calloc(rec->playbackFrameCount, sizeof(int32_t*));
+    rec->playbackFrames = safeCalloc(rec->playbackFrameCount, sizeof(int32_t*));
 
     repeat(objectLen, i) {
         const char* key = JsonReader_getObjectKey(root, i);
