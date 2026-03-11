@@ -1419,9 +1419,11 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
     const char* funcName = ctx->dataWin->func.functions[funcIndex].name;
 
     // Pop arguments from stack (args pushed right-to-left, so first arg is on top)
+    // Use stack-allocated buffer for small arg counts (GMS 1.4 supports up to 16 arguments)
+    RValue stackArgs[GML_MAX_ARGUMENTS];
     RValue* args = nullptr;
     if (argCount > 0) {
-        args = safeMalloc(argCount * sizeof(RValue));
+        args = (GML_MAX_ARGUMENTS >= argCount) ? stackArgs : safeMalloc(argCount * sizeof(RValue));
         repeat(argCount, i) {
             args[i] = stackPop(ctx);
         }
@@ -1458,7 +1460,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
             repeat(argCount, i) {
                 RValue_free(&args[i]);
             }
-            free(args);
+            if (args != stackArgs) free(args);
         }
 
         if (functionIsBeingTraced) {
@@ -1491,7 +1493,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
             repeat(argCount, i) {
                 RValue_free(&args[i]);
             }
-            free(args);
+            if (args != stackArgs) free(args);
         }
         stackPush(ctx,RValue_makeUndefined());
         return;
@@ -1512,7 +1514,7 @@ static void handleCall(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
         repeat(argCount, i) {
             RValue_free(&args[i]);
         }
-        free(args);
+        if (args != stackArgs) free(args);
     }
 
     // Push return value

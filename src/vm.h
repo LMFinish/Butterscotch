@@ -37,6 +37,9 @@
 // Default value matches the HTML5 runner's g_GMLMathEpsilon.
 #define GML_MATH_EPSILON 1e-5
 
+// GMS 1.4 supports up to 16 arguments per script call
+#define GML_MAX_ARGUMENTS 16
+
 // ===[ Comparison Kinds ]===
 #define CMP_LT  1
 #define CMP_LTE 2
