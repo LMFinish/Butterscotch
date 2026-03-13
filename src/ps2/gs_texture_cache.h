@@ -7,6 +7,8 @@
 #include "../data_win.h"
 
 // ===[ GsTextureCache ]===
+#define GS_VRAM_SIZE (4 * 1024 * 1024)
+
 // On-demand BTX texture loader for PS2 GS VRAM.
 // Loads pre-extracted BTX files from host filesystem,
 // uploads them to VRAM, and flushes all textures when VRAM is full.

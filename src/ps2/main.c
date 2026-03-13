@@ -298,7 +298,8 @@ int main(int argc, char* argv[]) {
             int32_t freeBytes = MAX_MEMORY_BYTES - mi.uordblks;
 
             char debugText[128];
-            snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nFree: %d bytes", lastFrameTimeMs, freeBytes);
+            uint32_t vramFreeBytes = GS_VRAM_SIZE - gsGlobal->CurrentPointer;
+            snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes", lastFrameTimeMs, freeBytes, (unsigned long) vramFreeBytes);
             gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, 10.0f, 10, 0.6f, debugColor, debugText);
         }
 

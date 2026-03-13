@@ -11,7 +11,6 @@
 #include "utils.h"
 
 // ===[ Constants ]===
-#define GS_VRAM_SIZE (4 * 1024 * 1024)
 #define BTX_HEADER_SIZE 64
 
 // ===[ BTX Header ]===
