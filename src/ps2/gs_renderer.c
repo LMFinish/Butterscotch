@@ -696,7 +696,7 @@ static void gsDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
         uint8_t r = BGR_R(color);
         uint8_t g = BGR_G(color);
         uint8_t b = BGR_B(color);
-        uint8_t a = (uint8_t) (alpha * 128.0f);
+        uint8_t a = alphaToGS(alpha);
         gsKit_prim_sprite(gs->gsGlobal, sx1, sy1, sx2, sy2, gs->zCounter, GS_SETREG_RGBAQ(r, g, b, a, 0x00));
         gs->zCounter++;
         return;
@@ -720,7 +720,7 @@ static void gsDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     uint8_t r = BGR_R(color) >> 1;
     uint8_t g = BGR_G(color) >> 1;
     uint8_t b = BGR_B(color) >> 1;
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
     u64 gsColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
     gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx1, sy1, u1, v1, sx2, sy2, u2, v2, gs->zCounter, gsColor);
@@ -757,7 +757,7 @@ static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
         uint8_t r = BGR_R(color);
         uint8_t g = BGR_G(color);
         uint8_t b = BGR_B(color);
-        uint8_t a = (uint8_t) (alpha * 128.0f);
+        uint8_t a = alphaToGS(alpha);
         gsKit_prim_sprite(gs->gsGlobal, sx1, sy1, sx2, sy2, gs->zCounter, GS_SETREG_RGBAQ(r, g, b, a, 0x00));
         gs->zCounter++;
         return;
@@ -789,7 +789,7 @@ static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     uint8_t r = BGR_R(color) >> 1;
     uint8_t g = BGR_G(color) >> 1;
     uint8_t b = BGR_B(color) >> 1;
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
     u64 gsColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
     gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx1, sy1, u1, v1, sx2, sy2, u2, v2, gs->zCounter, gsColor);
@@ -802,7 +802,7 @@ static void gsDrawRectangle(Renderer* renderer, float x1, float y1, float x2, fl
     uint8_t r = BGR_R(color);
     uint8_t g = BGR_G(color);
     uint8_t b = BGR_B(color);
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
 
     float sx1 = (x1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
     float sy1 = (y1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
@@ -820,7 +820,7 @@ static void gsDrawLine(Renderer* renderer, float x1, float y1, float x2, float y
     uint8_t r = BGR_R(color);
     uint8_t g = BGR_G(color);
     uint8_t b = BGR_B(color);
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
 
     float sx1 = (x1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
     float sy1 = (y1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
@@ -868,7 +868,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
     uint8_t r = hasTexture ? (BGR_R(color) >> 1) : BGR_R(color);
     uint8_t g = hasTexture ? (BGR_G(color) >> 1) : BGR_G(color);
     uint8_t b = hasTexture ? (BGR_B(color) >> 1) : BGR_B(color);
-    uint8_t a = (uint8_t) (renderer->drawAlpha * 128.0f);
+    uint8_t a = alphaToGS(renderer->drawAlpha);
     u64 textColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
     // Preprocess GML text (# -> \n, \# -> #)
@@ -1020,7 +1020,7 @@ static void gsDrawTile(Renderer* renderer, RoomTile* tile, float offsetX, float 
     uint8_t r = BGR_R(bgr) >> 1;
     uint8_t g = BGR_G(bgr) >> 1;
     uint8_t b = BGR_B(bgr) >> 1;
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
     u64 gsColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
     gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx1, sy1, u1, v1, sx2, sy2, u2, v2, gs->zCounter, gsColor);

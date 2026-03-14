@@ -6,6 +6,7 @@
 
 #include "utils.h"
 #include "text_utils.h"
+#include "ps2_utils.h"
 
 // ===[ Color Generation ]===
 // Generates a unique color for each tpagIndex so sprites are visually distinguishable.
@@ -23,7 +24,7 @@ static u64 colorForTpagIndex(int32_t tpagIndex, float alpha) {
         g = (uint8_t) (g | 0x40);
     }
 
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
     return GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 }
 
@@ -149,7 +150,7 @@ static void gsDrawRectangle(Renderer* renderer, float x1, float y1, float x2, fl
     uint8_t r = BGR_R(color);
     uint8_t g = BGR_G(color);
     uint8_t b = BGR_B(color);
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
 
     float sx1 = (x1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
     float sy1 = (y1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
@@ -167,7 +168,7 @@ static void gsDrawLine(Renderer* renderer, float x1, float y1, float x2, float y
     uint8_t r = BGR_R(color);
     uint8_t g = BGR_G(color);
     uint8_t b = BGR_B(color);
-    uint8_t a = (uint8_t) (alpha * 128.0f);
+    uint8_t a = alphaToGS(alpha);
 
     float sx1 = (x1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
     float sy1 = (y1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
@@ -192,7 +193,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
     uint8_t r = BGR_R(color);
     uint8_t g = BGR_G(color);
     uint8_t b = BGR_B(color);
-    uint8_t a = (uint8_t) (renderer->drawAlpha * 128.0f);
+    uint8_t a = alphaToGS(renderer->drawAlpha);
     u64 textColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
     // Preprocess GML text (# -> \n, \# -> #)
