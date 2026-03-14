@@ -14,13 +14,15 @@ typedef struct {
     uint8_t bpp;        // 4 or 8
 } AtlasTPAGEntry;
 
-// ===[ Per-atlas VRAM state ]===
+// ===[ VRAM Chunk (buddy system unit) ]===
+// Each chunk is 128KB of VRAM (fits one 4bpp 512x512 atlas).
+// An 8bpp atlas uses 2 consecutive chunks.
+#define VRAM_CHUNK_SIZE 131072 // 128KB = gsKit_texture_size(512, 512, GS_PSM_T4)
+
 typedef struct {
-    bool loaded;        // true if uploaded to VRAM
-    uint32_t vramAddr;  // VRAM address of pixel data
-    uint32_t tbw;       // Texture buffer width
-    uint8_t bpp;        // 4 or 8 (from TEX header)
-} AtlasVRAMSlot;
+    int16_t atlasId;    // Which atlas occupies this chunk (-1 = free)
+    uint64_t lastUsed;  // Frame number when last accessed
+} VRAMChunk;
 
 // ===[ GsRenderer Struct ]===
 typedef struct {
@@ -52,12 +54,14 @@ typedef struct {
     uint32_t clut8Count;       // Number of 8bpp CLUTs
     uint32_t* clut8VramAddrs;  // Per-CLUT VRAM addresses [clut8Count]
 
-    // Per-atlas texture state
-    uint16_t atlasSlotCount; // Number of atlas slots allocated
-    AtlasVRAMSlot* atlasSlots;
-
-    // VRAM base pointer (start of texture area, after framebuffers/fontm)
-    uint32_t vramBase;
+    // VRAM texture cache (buddy system with LRU eviction)
+    uint32_t textureVramBase;  // Start of texture region in VRAM (after framebuffers + CLUTs)
+    uint32_t chunkCount;       // Number of 128KB chunks available
+    VRAMChunk* chunks;         // Per-chunk state [chunkCount]
+    int16_t* atlasToChunk;     // atlasId -> first chunk index (-1 = not loaded) [atlasCount]
+    uint16_t atlasCount;       // Number of atlas IDs (maxAtlasId + 1)
+    uint8_t* atlasBpp;         // Bits per pixel per atlas (4 or 8), from ATLAS.BIN [atlasCount]
+    uint64_t frameCounter;     // Incremented each frame for LRU tracking
 } GsRenderer;
 
 Renderer* GsRenderer_create(GSGLOBAL* gsGlobal);

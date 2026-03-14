@@ -15,6 +15,8 @@
 // ===[ Constants ]===
 #define ATLAS_WIDTH 512
 #define ATLAS_HEIGHT 512
+#define PS2_SCREEN_WIDTH 640.0f
+#define PS2_SCREEN_HEIGHT 448.0f
 #define TEX_HEADER_SIZE 128
 #define CLUT4_ENTRY_SIZE 64    // 16 colors * 4 bytes
 #define CLUT8_ENTRY_SIZE 1024  // 256 colors * 4 bytes
@@ -101,7 +103,7 @@ static void loadAtlas(GsRenderer* gs) {
 
     fclose(f);
 
-    // Determine how many atlas slots we need (find max atlasId)
+    // Determine atlas count (find max atlasId) and build bpp table
     uint16_t maxAtlasId = 0;
     repeat(gs->atlasTPAGCount, i) {
         AtlasTPAGEntry* entry = &gs->atlasTPAGEntries[i];
@@ -110,10 +112,22 @@ static void loadAtlas(GsRenderer* gs) {
         }
     }
 
-    gs->atlasSlotCount = maxAtlasId + 1;
-    gs->atlasSlots = safeCalloc(gs->atlasSlotCount, sizeof(AtlasVRAMSlot));
+    gs->atlasCount = maxAtlasId + 1;
+    gs->atlasBpp = safeCalloc(gs->atlasCount, sizeof(uint8_t));
+    gs->atlasToChunk = safeMalloc(gs->atlasCount * sizeof(int16_t));
+    repeat(gs->atlasCount, i) {
+        gs->atlasToChunk[i] = -1;
+    }
 
-    fprintf(stderr, "GsRenderer: ATLAS.BIN loaded - %u TPAG entries, %u tile entries, %u atlas slots\n", gs->atlasTPAGCount, gs->atlasTileCount, gs->atlasSlotCount);
+    // Build bpp table from TPAG entries
+    repeat(gs->atlasTPAGCount, i) {
+        AtlasTPAGEntry* entry = &gs->atlasTPAGEntries[i];
+        if (entry->atlasId != 0xFFFF && gs->atlasCount > entry->atlasId) {
+            gs->atlasBpp[entry->atlasId] = entry->bpp;
+        }
+    }
+
+    fprintf(stderr, "GsRenderer: ATLAS.BIN loaded - %u TPAG entries, %u tile entries, %u atlases\n", gs->atlasTPAGCount, gs->atlasTileCount, gs->atlasCount);
 }
 
 // ===[ CLUT Loading and VRAM Upload ]===
@@ -192,19 +206,151 @@ static void loadAndUploadCLUTs(GsRenderer* gs) {
     fprintf(stderr, "GsRenderer: VRAM after CLUTs: 0x%08X / 0x%08X\n", gsGlobal->CurrentPointer, GS_VRAM_SIZE);
 }
 
-// ===[ On-demand Atlas Texture Loading ]===
-// Loads TEXn.BIN from host and uploads pixel data to VRAM.
-// Returns the AtlasVRAMSlot for the atlas.
-static AtlasVRAMSlot* ensureAtlasLoaded(GsRenderer* gs, uint16_t atlasId) {
-    if (atlasId >= gs->atlasSlotCount) {
-        fprintf(stderr, "GsRenderer: Atlas ID %u out of range (max %u)\n", atlasId, gs->atlasSlotCount - 1);
-        abort();
+// ===[ VRAM Texture Cache (Buddy System with LRU Eviction) ]===
+// Manages a pool of 128KB VRAM chunks for atlas textures.
+// 4bpp atlases use 1 chunk, 8bpp atlases use 2 consecutive chunks.
+
+#define FONTM_RESERVED_VRAM 65536 // 64KB reserved for gsKit's TexManager (FONTM debug overlay)
+
+// Initializes the chunk pool from the remaining VRAM after CLUTs.
+// Reserves 64KB at the end for gsKit's TexManager (used by FONTM).
+// Our chunk pool occupies the middle, between CLUTs and the FONTM region.
+//
+// VRAM layout: [Framebuffers] [CLUTs] [Chunk Pool ...] [64KB FONTM]
+static void initTextureCache(GsRenderer* gs) {
+    gs->textureVramBase = gs->gsGlobal->CurrentPointer;
+    uint32_t availableVram = GS_VRAM_SIZE - gs->textureVramBase - FONTM_RESERVED_VRAM;
+    gs->chunkCount = availableVram / VRAM_CHUNK_SIZE;
+
+    gs->chunks = safeMalloc(gs->chunkCount * sizeof(VRAMChunk));
+    forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
+        chunk->atlasId = -1;
+        chunk->lastUsed = 0;
     }
 
-    AtlasVRAMSlot* slot = &gs->atlasSlots[atlasId];
-    if (slot->loaded) return slot;
+    gs->frameCounter = 1;
 
-    // Load TEXn.BIN from host
+    // Advance CurrentPointer past our chunk pool so the TexManager only
+    // manages the 64KB FONTM region at the end of VRAM.
+    gs->gsGlobal->CurrentPointer = gs->textureVramBase + gs->chunkCount * VRAM_CHUNK_SIZE;
+    gsKit_TexManager_init(gs->gsGlobal);
+
+    uint32_t fontmVram = GS_VRAM_SIZE - gs->gsGlobal->CurrentPointer;
+    fprintf(stderr, "GsRenderer: Texture cache initialized - %u chunks (%u KB each), base 0x%08X, %u KB for textures, %u KB for FONTM\n", gs->chunkCount, VRAM_CHUNK_SIZE / 1024, gs->textureVramBase, gs->chunkCount * (VRAM_CHUNK_SIZE / 1024), fontmVram / 1024);
+}
+
+// Find the first run of consecutive free chunks.
+// Returns the index of the first chunk, or -1 if not found.
+static int32_t findConsecutiveFreeChunks(GsRenderer* gs, int chunksNeeded) {
+    int consecutive = 0;
+    forEachIndexed(VRAMChunk, chunk, i, gs->chunks, gs->chunkCount) {
+        if (0 > chunk->atlasId) {
+            consecutive++;
+            if (consecutive >= chunksNeeded) {
+                return (int32_t) (i - (uint32_t) chunksNeeded + 1);
+            }
+        } else {
+            consecutive = 0;
+        }
+    }
+    return -1;
+}
+
+// Count total free chunks.
+static uint32_t countFreeChunks(GsRenderer* gs) {
+    uint32_t count = 0;
+    forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
+        if (0 > chunk->atlasId)
+            count++;
+    }
+    return count;
+}
+
+// Find the atlas with the oldest lastUsed time (LRU victim).
+// Returns the atlasId, or -1 if no loaded atlases.
+static int16_t findLRUVictim(GsRenderer* gs) {
+    uint64_t oldest = UINT64_MAX;
+    int16_t victimAtlas = -1;
+    forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
+        if (chunk->atlasId >= 0 && oldest > chunk->lastUsed) {
+            oldest = chunk->lastUsed;
+            victimAtlas = chunk->atlasId;
+        }
+    }
+    return victimAtlas;
+}
+
+// Evict an atlas from the cache, freeing its chunk(s).
+static void evictAtlas(GsRenderer* gs, int16_t atlasId) {
+    forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
+        if (chunk->atlasId == atlasId) {
+            chunk->atlasId = -1;
+            chunk->lastUsed = 0;
+        }
+    }
+
+    if (atlasId >= 0 && gs->atlasCount > (uint16_t) atlasId) {
+        gs->atlasToChunk[atlasId] = -1;
+    }
+
+    uint32_t availableChunks = countFreeChunks(gs);
+    fprintf(stderr, "GsRenderer: Evicted atlas %d from VRAM (available chunks = %d)\n", atlasId, availableChunks);
+}
+
+// Defragment the texture cache by evicting all loaded atlases.
+// They will be reloaded on-demand as needed during subsequent draw calls.
+static void defragTextureCache(GsRenderer* gs) {
+    fprintf(stderr, "GsRenderer: Defragmenting VRAM texture cache...\n");
+
+    forEach(VRAMChunk, chunk, gs->chunks, gs->chunkCount) {
+        chunk->atlasId = -1;
+        chunk->lastUsed = 0;
+    }
+
+    repeat(gs->atlasCount, i) {
+        gs->atlasToChunk[i] = -1;
+    }
+
+    fprintf(stderr, "GsRenderer: Defrag complete - all %u chunks freed\n", gs->chunkCount);
+}
+
+// Allocate consecutive chunks for an atlas. Evicts LRU victims or defrags if needed.
+// Returns the first chunk index, or -1 if VRAM is truly exhausted.
+static int32_t allocateChunks(GsRenderer* gs, int chunksNeeded) {
+    // Attempt 1: find free consecutive chunks
+    int32_t idx = findConsecutiveFreeChunks(gs, chunksNeeded);
+    if (idx >= 0) return idx;
+
+    // Attempt 2: evict LRU victims one at a time until space is found
+    repeat(gs->chunkCount, attempts) {
+        int16_t victim = findLRUVictim(gs);
+        if (0 > victim)
+            break;
+
+        evictAtlas(gs, victim);
+
+        idx = findConsecutiveFreeChunks(gs, chunksNeeded);
+
+        if (idx >= 0)
+            return idx;
+    }
+
+    // Attempt 3: defrag - evict ALL and let them reload on demand
+    // Handles fragmentation where enough free chunks exist but aren't consecutive
+    if (countFreeChunks(gs) >= (uint32_t) chunksNeeded) {
+        defragTextureCache(gs);
+        idx = findConsecutiveFreeChunks(gs, chunksNeeded);
+
+        if (idx >= 0)
+            return idx;
+    }
+
+    // VRAM truly exhausted
+    return -1;
+}
+
+// Upload atlas pixel data from TEX file to the given VRAM chunk(s).
+static void uploadAtlasToChunk(GsRenderer* gs, uint16_t atlasId, int32_t firstChunk) {
     char path[64];
     snprintf(path, sizeof(path), "host:TEX%u.BIN", atlasId);
 
@@ -216,7 +362,6 @@ static AtlasVRAMSlot* ensureAtlasLoaded(GsRenderer* gs, uint16_t atlasId) {
         abort();
     }
 
-    // Parse header
     uint8_t version = data[0];
     if (version != 0) {
         fprintf(stderr, "GsRenderer: Unsupported TEX version %u in %s\n", version, path);
@@ -229,12 +374,12 @@ static AtlasVRAMSlot* ensureAtlasLoaded(GsRenderer* gs, uint16_t atlasId) {
     uint32_t pixelDataSize = BinaryUtils_readUint32(data + 6);
 
     if (width != ATLAS_WIDTH || height != ATLAS_HEIGHT) {
-        fprintf(stderr, "GsRenderer: %s has unexpected dimensions %ux%u (expected %ux%u)\n", path, width, height, ATLAS_WIDTH, ATLAS_HEIGHT);
+        fprintf(stderr, "GsRenderer: %s unexpected dimensions %ux%u (expected %ux%u)\n", path, width, height, ATLAS_WIDTH, ATLAS_HEIGHT);
         abort();
     }
 
     if (bpp != 4 && bpp != 8) {
-        fprintf(stderr, "GsRenderer: %s has unsupported bpp %u\n", path, bpp);
+        fprintf(stderr, "GsRenderer: %s unsupported bpp %u\n", path, bpp);
         abort();
     }
 
@@ -244,32 +389,64 @@ static AtlasVRAMSlot* ensureAtlasLoaded(GsRenderer* gs, uint16_t atlasId) {
         abort();
     }
 
-    // Determine GS PSM and allocate VRAM
+    // Upload pixel data to VRAM at the chunk's address
     uint8_t psm = (bpp == 4) ? GS_PSM_T4 : GS_PSM_T8;
-    uint32_t vramSize = gsKit_texture_size(ATLAS_WIDTH, ATLAS_HEIGHT, psm);
-    uint32_t vramAddr = gsKit_vram_alloc(gs->gsGlobal, vramSize, GSKIT_ALLOC_USERBUFFER);
-    if (vramAddr == GSKIT_ALLOC_ERROR) {
-        fprintf(stderr, "GsRenderer: Failed to allocate VRAM for %s (%u bytes)\n", path, vramSize);
+    uint32_t tbw = ATLAS_WIDTH / 64;
+    uint32_t vramAddr = gs->textureVramBase + (uint32_t) firstChunk * VRAM_CHUNK_SIZE;
+    uint8_t* pixelData = data + TEX_HEADER_SIZE;
+
+    gsKit_texture_send((u32*) pixelData, ATLAS_WIDTH, ATLAS_HEIGHT, vramAddr, psm, tbw, GS_CLUT_TEXTURE);
+
+    // Update chunk state
+    int chunksUsed = (bpp == 8) ? 2 : 1;
+    for (int i = 0; chunksUsed > i; i++) {
+        gs->chunks[firstChunk + i].atlasId = (int16_t) atlasId;
+        gs->chunks[firstChunk + i].lastUsed = gs->frameCounter;
+    }
+    gs->atlasToChunk[atlasId] = (int16_t) firstChunk;
+
+    fprintf(stderr, "GsRenderer: TEX%u uploaded to chunk %d (VRAM 0x%08X, %ubpp)\n", atlasId, firstChunk, vramAddr, bpp);
+
+    free(data);
+}
+
+// Ensure an atlas is loaded into VRAM, using LRU eviction if needed.
+// Returns true on success, false on failure.
+static bool ensureAtlasLoaded(GsRenderer* gs, uint16_t atlasId) {
+    if (atlasId >= gs->atlasCount) {
+        fprintf(stderr, "GsRenderer: Atlas ID %u out of range (max %u)\n", atlasId, gs->atlasCount - 1);
+        return false;
+    }
+
+    // Already loaded? Just touch LRU timestamp
+    if (gs->atlasToChunk[atlasId] >= 0) {
+        int16_t firstChunk = gs->atlasToChunk[atlasId];
+        uint8_t bpp = gs->atlasBpp[atlasId];
+        int chunksUsed = (bpp == 8) ? 2 : 1;
+        repeat(chunksUsed, i) {
+            gs->chunks[firstChunk + i].lastUsed = gs->frameCounter;
+        }
+        return true;
+    }
+
+    // Determine how many chunks we need
+    uint8_t bpp = gs->atlasBpp[atlasId];
+    if (bpp != 4 && bpp != 8) {
+        fprintf(stderr, "GsRenderer: Atlas %u has unknown bpp %u\n", atlasId, bpp);
+        return false;
+    }
+    int chunksNeeded = (bpp == 8) ? 2 : 1;
+
+    // Allocate chunks (may evict or defrag)
+    int32_t chunkIdx = allocateChunks(gs, chunksNeeded);
+    if (0 > chunkIdx) {
+        fprintf(stderr, "GsRenderer: VRAM exhausted! Cannot allocate %d chunk(s) for atlas %u (%ubpp)\n", chunksNeeded, atlasId, bpp);
         abort();
     }
 
-    // Upload pixel data to VRAM
-    uint8_t* pixelData = data + TEX_HEADER_SIZE;
-
-    // gsKit_texture_send needs 128-byte aligned data, the loadFileRaw already memaligns
-    // TBW for 512px: for T8 = 512/64 = 8, for T4 = 512/64 = 8 (but stored differently)
-    uint32_t tbw = ATLAS_WIDTH / 64;
-    gsKit_texture_send((u32*) pixelData, ATLAS_WIDTH, ATLAS_HEIGHT, vramAddr, psm, tbw, GS_CLUT_TEXTURE);
-
-    slot->loaded = true;
-    slot->vramAddr = vramAddr;
-    slot->tbw = tbw;
-    slot->bpp = bpp;
-
-    fprintf(stderr, "GsRenderer: %s uploaded to VRAM at 0x%08X (%u bytes, %ubpp, TBW=%u)\n",path, vramAddr, vramSize, bpp, tbw);
-
-    free(data);
-    return slot;
+    // Load TEX file and upload to the allocated chunk(s)
+    uploadAtlasToChunk(gs, atlasId, chunkIdx);
+    return true;
 }
 
 // ===[ GSTEXTURE setup for a given TPAG entry ]===
@@ -281,14 +458,19 @@ static bool setupTextureForTPAG(GsRenderer* gs, GSTEXTURE* tex, int32_t tpagInde
     AtlasTPAGEntry* entry = &gs->atlasTPAGEntries[tpagIndex];
     if (entry->atlasId == 0xFFFF) return false;
 
-    // Ensure the atlas texture is loaded into VRAM
-    AtlasVRAMSlot* slot = ensureAtlasLoaded(gs, entry->atlasId);
+    // Ensure the atlas texture is loaded into VRAM (may trigger LRU eviction)
+    if (!ensureAtlasLoaded(gs, entry->atlasId))
+        return false;
+
+    // Compute VRAM address from chunk index
+    int16_t chunkIdx = gs->atlasToChunk[entry->atlasId];
+    uint32_t vramAddr = gs->textureVramBase + (uint32_t) chunkIdx * VRAM_CHUNK_SIZE;
 
     memset(tex, 0, sizeof(GSTEXTURE));
     tex->Width = ATLAS_WIDTH;
     tex->Height = ATLAS_HEIGHT;
-    tex->TBW = slot->tbw;
-    tex->Vram = slot->vramAddr;
+    tex->TBW = ATLAS_WIDTH / 64;
+    tex->Vram = vramAddr;
     tex->Filter = GS_FILTER_NEAREST;
     tex->ClutStorageMode = GS_CLUT_STORAGE_CSM1;
 
@@ -297,8 +479,7 @@ static bool setupTextureForTPAG(GsRenderer* gs, GSTEXTURE* tex, int32_t tpagInde
         tex->ClutPSM = GS_PSM_CT32;
 
         if (entry->clutIndex >= gs->clut4Count) {
-            fprintf(stderr, "GsRenderer: CLUT4 index %u out of range (max %u) for TPAG %d\n",
-                    entry->clutIndex, gs->clut4Count - 1, tpagIndex);
+            fprintf(stderr, "GsRenderer: CLUT4 index %u out of range (max %u) for TPAG %d\n", entry->clutIndex, gs->clut4Count - 1, tpagIndex);
             abort();
         }
 
@@ -342,13 +523,18 @@ static void gsInit(Renderer* renderer, DataWin* dataWin) {
     // Upload CLUTs to VRAM
     loadAndUploadCLUTs(gs);
 
+    // Initialize the texture cache chunk pool (uses remaining VRAM after CLUTs)
+    initTextureCache(gs);
+
     fprintf(stderr, "GsRenderer: Initialized (textured mode)\n");
 }
 
 static void gsDestroy(Renderer* renderer) {
     GsRenderer* gs = (GsRenderer*) renderer;
     free(gs->atlasTPAGEntries);
-    free(gs->atlasSlots);
+    free(gs->chunks);
+    free(gs->atlasToChunk);
+    free(gs->atlasBpp);
     free(gs->clut4VramAddrs);
     free(gs->clut8VramAddrs);
     free(gs);
@@ -357,6 +543,7 @@ static void gsDestroy(Renderer* renderer) {
 static void gsBeginFrame(Renderer* renderer, [[maybe_unused]] int32_t gameW, [[maybe_unused]] int32_t gameH, [[maybe_unused]] int32_t windowW, [[maybe_unused]] int32_t windowH) {
     GsRenderer* gs = (GsRenderer*) renderer;
     gs->zCounter = 1;
+    gs->frameCounter++;
 }
 
 static void gsEndFrame([[maybe_unused]] Renderer* renderer) {

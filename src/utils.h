@@ -4,9 +4,13 @@
 #include <stdlib.h>
 #include <stddef.h>
 
-#define forEach(type, item, array, count) type* item; for (typeof(count) _i = 0; _i < (count) && ((item) = &(array)[_i], 1); _i++)
+#define forEach(type, item, array, count) \
+    for (typeof(count) item##_i_ = 0; item##_i_ < (count); item##_i_++) \
+    for (type* item = &(array)[item##_i_]; item; item = NULL)
 
-#define forEachIndexed(type, item, index, array, count) type* item; for (typeof(count) index = 0; index < (count) && ((item) = &(array)[index], 1); index++)
+#define forEachIndexed(type, item, index, array, count) \
+    for (typeof(count) index = 0; index < (count); index++) \
+    for (type* item = &(array)[index]; item; item = NULL)
 
 // The "typeof((typeof(n))0" is used to remove the "const" from the typeof
 
