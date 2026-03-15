@@ -2522,8 +2522,50 @@ static RValue builtinMakeColourHsv(VMContext* ctx, RValue* args, int32_t argCoun
 STUB_RETURN_ZERO(display_get_width)
 STUB_RETURN_ZERO(display_get_height)
 
-// Collision stubs
-STUB_RETURN_ZERO(place_meeting)
+// place_meeting(x, y, obj) - returns true if the calling instance would collide with obj at position (x, y)
+static RValue builtinPlaceMeeting(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeBool(false);
+
+    Runner* runner = (Runner*) ctx->runner;
+    Instance* caller = (Instance*) ctx->currentInstance;
+    if (caller == nullptr) return RValue_makeBool(false);
+
+    double testX = RValue_toReal(args[0]);
+    double testY = RValue_toReal(args[1]);
+    int32_t target = RValue_toInt32(args[2]);
+
+    // Save current position and temporarily move to test position
+    double savedX = caller->x;
+    double savedY = caller->y;
+    caller->x = testX;
+    caller->y = testY;
+
+    InstanceBBox callerBBox = Collision_computeBBox(runner->dataWin, caller);
+    bool found = false;
+
+    if (callerBBox.valid) {
+        int32_t instanceCount = (int32_t) arrlen(runner->instances);
+        repeat(instanceCount, i) {
+            Instance* other = runner->instances[i];
+            if (!other->active || other == caller) continue;
+            if (!Collision_matchesTarget(runner->dataWin, other, target)) continue;
+
+            InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
+            if (!otherBBox.valid) continue;
+
+            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+                found = true;
+                break;
+            }
+        }
+    }
+
+    // Restore original position
+    caller->x = savedX;
+    caller->y = savedY;
+
+    return RValue_makeBool(found);
+}
 // collision_line(x1, y1, x2, y2, obj, prec, notme)
 static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCount) {
     if (7 > argCount) return RValue_makeReal((double) INSTANCE_NOONE);
@@ -3213,7 +3255,7 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("display_get_height", builtin_display_get_height);
 
     // Collision
-    registerBuiltin("place_meeting", builtin_place_meeting);
+    registerBuiltin("place_meeting", builtinPlaceMeeting);
     registerBuiltin("collision_rectangle", builtinCollisionRectangle);
     registerBuiltin("collision_line", builtinCollisionLine);
     registerBuiltin("collision_point", builtinCollisionPoint);
