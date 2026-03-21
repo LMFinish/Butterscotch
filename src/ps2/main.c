@@ -581,36 +581,12 @@ int main(int argc, char* argv[]) {
 
         int gameFramesRan = 0;
         while (accumulator >= targetFrameTime) {
-            // Clear pressed/released before 2nd+ steps so press events, don't fire multiple times when catching up
+            // Clear pressed/released before 2nd+ steps so press events don't fire multiple times when catching up
             if (gameFramesRan > 0)
                 RunnerKeyboard_beginFrame(runner->keyboard);
 
             Runner_step(runner);
-            accumulator -= targetFrameTime;
-            gameFramesRan++;
-        }
 
-        // Update audio system (gain fading, stream to audsrv)
-        if (runner->audioSystem != nullptr) {
-            float dt = (float) deltaTime;
-            if (0.0f > dt) dt = 0.0f;
-            if (dt > 0.1f) dt = 0.1f;
-            runner->audioSystem->vtable->update(runner->audioSystem, dt);
-        }
-
-        // Update FPS counter (counts actual rendered frames, not game logic steps)
-        if (gameFramesRan > 0) {
-            renderFpsCounter++;
-        }
-        u64 fpsElapsed = frameStartTime - fpsTimerStart;
-        if (fpsElapsed >= (u64) kBUSCLK) {
-            displayedRenderFps = renderFpsCounter;
-            renderFpsCounter = 0;
-            fpsTimerStart = frameStartTime;
-        }
-
-        // ===[ Render (only if game logic ran) ]===
-        if (gameFramesRan > 0) {
             gsKit_clear(gsGlobal, GS_SETREG_RGBAQ(0x00, 0x00, 0x00, 0x80, 0x00));
 
             renderer->vtable->beginFrame(renderer, gameW, gameH, 640, 448);
@@ -666,6 +642,36 @@ int main(int argc, char* argv[]) {
 
             renderer->vtable->endFrame(renderer);
 
+            accumulator -= targetFrameTime;
+            gameFramesRan++;
+
+            // For intermediate catch-up frames, flush the GS queue so it doesn't accumulate
+            // (the back buffer will be overwritten by the next iteration's rendering anyway)
+            if (accumulator >= targetFrameTime) {
+                gsKit_queue_exec(gsGlobal);
+            }
+        }
+
+        // Update audio system (gain fading, stream to audsrv)
+        if (runner->audioSystem != nullptr) {
+            float dt = (float) deltaTime;
+            if (0.0f > dt) dt = 0.0f;
+            if (dt > 0.1f) dt = 0.1f;
+            runner->audioSystem->vtable->update(runner->audioSystem, dt);
+        }
+
+        // Update FPS counter (counts actual rendered frames, not game logic steps)
+        if (gameFramesRan > 0) {
+            renderFpsCounter++;
+        }
+        u64 fpsElapsed = frameStartTime - fpsTimerStart;
+        if (fpsElapsed >= (u64) kBUSCLK) {
+            displayedRenderFps = renderFpsCounter;
+            renderFpsCounter = 0;
+            fpsTimerStart = frameStartTime;
+        }
+
+        if (gameFramesRan > 0) {
             // Measure frame time BEFORE flipping
             u64 frameEndTime = GetTimerSystemTime();
             lastFrameTimeMs = (float) (frameEndTime - frameStartTime) / (float) (kBUSCLK / 1000);
@@ -696,9 +702,7 @@ int main(int argc, char* argv[]) {
             // Clear accumulated input after both Step and Draw events have consumed it, so edges don't re-fire on the next game frame
             // This MUST be after Runner_draw because games CAN handle input in Draw events (example: Undertale's naming screen)
             RunnerKeyboard_beginFrame(runner->keyboard);
-        }
 
-        if (gameFramesRan > 0) {
             // Execute draw queue and flip buffers
             gsKit_queue_exec(gsGlobal);
             gsKit_sync_flip(gsGlobal);
