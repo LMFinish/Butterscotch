@@ -104,6 +104,14 @@ static inline char* TextUtils_preprocessGmlText(const char* text) {
     return result;
 }
 
+// Preprocess GML text ONLY if the runner is not GameMaker: Studio 2
+// Returns a heap-allocated string that must be freed by the caller
+static inline char* TextUtils_preprocessGmlTextIfNeeded(Runner* runner, const char* text) {
+    if (runner->isGMS2)
+        return safeStrdup(text);
+    return TextUtils_preprocessGmlText(text);
+}
+
 // Returns true if c is \r or \n
 static inline bool TextUtils_isNewlineChar(char c) {
     return c == '\n' || c == '\r';

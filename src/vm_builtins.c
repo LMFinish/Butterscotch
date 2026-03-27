@@ -3023,7 +3023,9 @@ static RValue builtin_drawText(VMContext* ctx, RValue* args, [[maybe_unused]] in
     float y = (float) RValue_toReal(args[1]);
     char* str = RValue_toString(args[2]);
 
-    runner->renderer->vtable->drawText(runner->renderer, str, x, y, 1.0f, 1.0f, 0.0f);
+    char* processedText = TextUtils_preprocessGmlTextIfNeeded(runner, str);
+    runner->renderer->vtable->drawText(runner->renderer, processedText, x, y, 1.0f, 1.0f, 0.0f);
+    free(processedText);
     free(str);
     return RValue_makeUndefined();
 }
@@ -3039,7 +3041,9 @@ static RValue builtin_drawTextTransformed(VMContext* ctx, RValue* args, [[maybe_
     float yscale = (float) RValue_toReal(args[4]);
     float angle = (float) RValue_toReal(args[5]);
 
-    runner->renderer->vtable->drawText(runner->renderer, str, x, y, xscale, yscale, angle);
+    char* processedText = TextUtils_preprocessGmlTextIfNeeded(runner, str);
+    runner->renderer->vtable->drawText(runner->renderer, processedText, x, y, xscale, yscale, angle);
+    free(processedText);
     free(str);
     return RValue_makeUndefined();
 }
@@ -3345,7 +3349,7 @@ static RValue builtin_stringWidth(VMContext* ctx, RValue* args, int32_t argCount
     Font* font = &renderer->dataWin->font.fonts[fontIndex];
     char* str = RValue_toString(args[0]);
 
-    char* processed = TextUtils_preprocessGmlText(str);
+    char* processed = TextUtils_preprocessGmlTextIfNeeded(runner, str);
     free(str);
     int32_t textLen = (int32_t) strlen(processed);
 
@@ -3385,7 +3389,7 @@ static RValue builtin_stringHeight(VMContext* ctx, RValue* args, int32_t argCoun
     Font* font = &renderer->dataWin->font.fonts[fontIndex];
     char* str = RValue_toString(args[0]);
 
-    char* processed = TextUtils_preprocessGmlText(str);
+    char* processed = TextUtils_preprocessGmlTextIfNeeded(runner, str);
     free(str);
     int32_t textLen = (int32_t) strlen(processed);
     int32_t lineCount = TextUtils_countLines(processed, textLen);
