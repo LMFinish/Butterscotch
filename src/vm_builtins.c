@@ -2665,7 +2665,7 @@ static RValue builtinInstanceActivateObject(VMContext* ctx, RValue* args, int32_
     int instances = arrlen(ctx->runner->instances);
     repeat(instances, i) {
         Instance* instance = ctx->runner->instances[i];
-        if (!instance->active && !instance->destroyed && VM_isObjectOrDescendant(ctx->dataWin, instance->objectIndex, objIndex)) {
+        if (!instance->active && !instance->destroyed && (objIndex == INSTANCE_ALL || VM_isObjectOrDescendant(ctx->dataWin, instance->objectIndex, objIndex))) {
             instance->active = true;
         }
     }
@@ -2679,7 +2679,7 @@ static RValue builtinInstanceDeactivateObject(VMContext* ctx, RValue* args, int3
     int instances = arrlen(ctx->runner->instances);
     repeat(instances, i) {
         Instance* instance = ctx->runner->instances[i];
-        if (instance->active && !instance->destroyed && VM_isObjectOrDescendant(ctx->dataWin, instance->objectIndex, objIndex)) {
+        if (instance->active && !instance->destroyed && (objIndex == INSTANCE_ALL || VM_isObjectOrDescendant(ctx->dataWin, instance->objectIndex, objIndex))) {
             instance->active = false;
         }
     }
