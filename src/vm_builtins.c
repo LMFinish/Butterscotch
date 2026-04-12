@@ -1420,6 +1420,20 @@ static RValue builtinOsGetRegion(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValu
 
 // ===[ DS_MAP BUILTIN FUNCTIONS ]===
 
+static inline ptrdiff_t getValueIndexInMap(DsMapEntry** mapPtr, RValue keyRvalue) {
+    ptrdiff_t idx;
+    if (keyRvalue.type == RVALUE_STRING && keyRvalue.string != nullptr) {
+        // Fast path: No need to convert the RValue to a string if it is already a string
+        idx = shgeti(*mapPtr, keyRvalue.string);
+    } else {
+        char* key = RValue_toString(keyRvalue);
+        idx = shgeti(*mapPtr, key);
+        free(key);
+    }
+
+    return idx;
+}
+
 static RValue builtinDsMapCreate(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     return RValue_makeReal((GMLReal) dsMapCreate());
 }
@@ -1491,9 +1505,8 @@ static RValue builtinDsMapFindValue(MAYBE_UNUSED VMContext* ctx, RValue* args, i
     DsMapEntry** mapPtr = dsMapGet(id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
-    char* key = RValue_toString(args[1]);
-    ptrdiff_t idx = shgeti(*mapPtr, key);
-    free(key);
+    ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
+
     if (0 > idx) return RValue_makeUndefined();
     RValue val = (*mapPtr)[idx].value;
     if (val.type == RVALUE_STRING && val.string != nullptr) {
@@ -1508,9 +1521,8 @@ static RValue builtinDsMapExists(MAYBE_UNUSED VMContext* ctx, RValue* args, int3
     DsMapEntry** mapPtr = dsMapGet(id);
     if (mapPtr == nullptr) return RValue_makeReal(0.0);
 
-    char* key = RValue_toString(args[1]);
-    ptrdiff_t idx = shgeti(*mapPtr, key);
-    free(key);
+    ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
+
     return RValue_makeReal(idx >= 0 ? 1.0 : 0.0);
 }
 
@@ -1528,9 +1540,7 @@ static RValue builtinDsMapFindNext(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     DsMapEntry** mapPtr = dsMapGet(id);
     if (mapPtr == nullptr) return RValue_makeUndefined();
 
-    char* prevKey = RValue_toString(args[1]);
-    ptrdiff_t idx = shgeti(*mapPtr, prevKey);
-    free(prevKey);
+    ptrdiff_t idx = getValueIndexInMap(mapPtr, args[1]);
     if (0 > idx || idx + 1 >= shlen(*mapPtr)) return RValue_makeUndefined();
     return RValue_makeOwnedString(safeStrdup((*mapPtr)[idx + 1].key));
 }
@@ -4497,10 +4507,15 @@ static RValue builtinPathEnd(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UN
 
 // string_hash_to_newline - converts # to \n in a string
 static RValue builtinStringHashToNewline(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) { 
-    if (1 > argCount) return RValue_makeString(""); 
-    char* str = RValue_toString(args[0]); 
-    char *result = TextUtils_preprocessGmlText(str);
-    free(str); 
+    if (1 > argCount) return RValue_makeString("");
+    RValue original = args[0];
+
+    if (original.type != RVALUE_STRING) {
+        // Fast path: If the argument is not a string, return a copy of it
+        return RValue_makeOwnedString(RValue_toString(original));
+    }
+
+    char *result = TextUtils_preprocessGmlText(original.string != nullptr ? original.string : "");
     return RValue_makeOwnedString(result);
 }
 
