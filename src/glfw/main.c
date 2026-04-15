@@ -12,7 +12,8 @@
 #include <signal.h>
 #ifdef _WIN32
 #include <windows.h>
-#else
+#endif
+#ifdef __GLIBC__
 #include <malloc.h>
 #endif
 
@@ -423,7 +424,7 @@ int main(int argc, char* argv[]) {
     Gen8* gen8 = &dataWin->gen8;
     printf("Loaded \"%s\" (%d) successfully! [Bytecode Version %u]\n", gen8->name, gen8->gameID, gen8->bytecodeVersion);
 
-    #ifndef _WIN32
+    #ifdef __GLIBC__
     {
         struct mallinfo2 mi = mallinfo2();
         printf("Memory after data.win parsing: used=%zu bytes (%.1f KB)\n", mi.uordblks, mi.uordblks / 1024.0f);
