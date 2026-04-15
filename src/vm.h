@@ -193,6 +193,8 @@ typedef struct VMContext {
     struct { int32_t key; int32_t value; }* globalArrayVarTracker;
     // funcName -> codeIndex hash map (stb_ds)
     struct { char* key; int32_t value; }* funcMap;
+    // codeName -> CodeLocals* hash map (stb_ds)
+    struct { char* key; CodeLocals* value; }* codeLocalsMap;
     // varName -> varID hash map for global variables (stb_ds)
     struct { char* key; int32_t value; }* globalVarNameMap;
     // "codeName\tfuncName" -> true, for deduplicating unknown function warnings
@@ -222,7 +224,6 @@ VMContext* VM_create(DataWin* dataWin);
 void VM_reset(VMContext* ctx);
 RValue VM_executeCode(VMContext* ctx, int32_t codeIndex);
 RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount);
-CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName);
 void VM_free(VMContext* ctx);
 bool VM_isObjectOrDescendant(DataWin* dataWin, int32_t objectIndex, int32_t targetObjectIndex);
 void VM_buildCrossReferences(VMContext* ctx);

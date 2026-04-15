@@ -2049,6 +2049,21 @@ VMContext* VM_create(DataWin* dataWin) {
         }
     }
 
+    // Build codeName -> CodeLocals* hash map
+    ctx->codeLocalsMap = nullptr;
+    repeat(dataWin->func.codeLocalsCount, i) {
+        CodeLocals* cl = &dataWin->func.codeLocals[i];
+        shput(ctx->codeLocalsMap, safeStrdup(cl->name), cl);
+        // In bytecode 17+, CodeLocals uses "gml_GlobalScript_" prefix but callable CODE entries use "gml_Script_", so we'll map the "gml_Script_" variant too
+        if (dataWin->gen8.bytecodeVersion >= 17) {
+            if (strncmp(cl->name, "gml_GlobalScript_", 17) == 0) {
+                char scriptName[512];
+                snprintf(scriptName, sizeof(scriptName), "gml_Script_%s", cl->name + 17);
+                shput(ctx->codeLocalsMap, safeStrdup(scriptName), cl);
+            }
+        }
+    }
+
     // Register built-in functions
     VMBuiltins_registerAll(ctx, dataWin->gen8.major >= 2);
 
@@ -2136,6 +2151,10 @@ void VM_reset(VMContext* ctx) {
     fprintf(stderr, "VM: Reset complete (%u global vars cleared)\n", ctx->globalVarCount);
 }
 
+static CodeLocals* resolveCodeLocals(VMContext* ctx, const char* codeName) {
+    return shget(ctx->codeLocalsMap, (char*) codeName);
+}
+
 RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     require(codeIndex >= 0 && ctx->dataWin->code.count > (uint32_t) codeIndex);
     CodeEntry* code = &ctx->dataWin->code.entries[codeIndex];
@@ -2146,10 +2165,10 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     ctx->currentCodeName = code->name;
 
     // Resolve CodeLocals for local variable slot mapping
-    ctx->currentCodeLocals = VM_resolveCodeLocals(ctx, code->name);
+    ctx->currentCodeLocals = resolveCodeLocals(ctx, code->name);
 
-    // Allocate locals
-    uint32_t localsCount = code->localsCount;
+    // Allocate locals - CodeLocals is the authoritative source for local variable count NOT code->localsCount
+    uint32_t localsCount = ctx->currentCodeLocals->localVarCount;
     if (localsCount == 0) localsCount = 1; // at least 1 slot to avoid nullptr
     RValue localVars[MAX_CODE_LOCALS];
     ctx->localVars = localVars;
@@ -2179,16 +2198,6 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     return result;
 }
 
-CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName) {
-    CodeLocals* codeLocals = nullptr;
-    forEach(CodeLocals, cl, ctx->dataWin->func.codeLocals, ctx->dataWin->func.codeLocalsCount) {
-        if (strcmp(cl->name, codeName) == 0) {
-            codeLocals = cl;
-            break;
-        }
-    }
-    return codeLocals;
-}
 
 RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount) {
     require(codeIndex >= 0 && ctx->dataWin->code.count > (uint32_t) codeIndex);
@@ -2216,12 +2225,12 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     ctx->ip = code->offset;
     ctx->codeEnd = code->length;
     ctx->currentCodeName = code->name;
-    ctx->currentCodeLocals = VM_resolveCodeLocals(ctx, code->name);
+    ctx->currentCodeLocals = resolveCodeLocals(ctx, code->name);
     ctx->localArrayMap = nullptr;
 
     // We use fixed-size arrays instead of VLAs because it seems that using multiple VLAs in a single function things get corrupted somehow?
     // So when you see this MAX_CODE_LOCALS and GML_MAX_ARGUMENTS, you can shake your fist in the air and say "damn you MIPS!!1"
-    uint32_t localsCount = code->localsCount;
+    uint32_t localsCount = ctx->currentCodeLocals->localVarCount;
     if (localsCount == 0) localsCount = 1;
     RValue localVars[MAX_CODE_LOCALS];
     ctx->localVars = localVars;
@@ -2709,7 +2718,7 @@ void VM_disassemble(VMContext* ctx, int32_t codeIndex) {
     printf("=== %s (length=%u, locals=%u, args=%u) ===\n", code->name, code->length, code->localsCount, code->argumentsCount);
 
     // CodeLocals
-    CodeLocals* locals = VM_resolveCodeLocals(ctx, code->name);
+    CodeLocals* locals = resolveCodeLocals(ctx, code->name);
     if (locals != nullptr && locals->localVarCount > 0) {
         printf("Locals:");
         repeat(locals->localVarCount, i) {
