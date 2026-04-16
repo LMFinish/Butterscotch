@@ -264,9 +264,8 @@ static int32_t resolveArrayAliasHm(SelfVarEntry* vars, int32_t varID) {
 // These resolve a RVALUE_GML_ARRAY to the appropriate array map based on scope,
 // then read/write elements by index.
 
-// Forward declarations needed for array ref helpers
+// Forward declaration needed for array ref helpers
 static Instance* findInstanceByTarget(VMContext* ctx, int32_t target);
-static uint32_t resolveLocalSlot(VMContext* ctx, int32_t varID);
 
 static ArrayMapEntry** resolveArrayMap(VMContext* ctx, RValue* arrayRef, int32_t* outVarID) {
     require(arrayRef->type == RVALUE_GML_ARRAY);
@@ -276,7 +275,6 @@ static ArrayMapEntry** resolveArrayMap(VMContext* ctx, RValue* arrayRef, int32_t
 
     switch (scope) {
         case INSTANCE_LOCAL: {
-            *outVarID = (int32_t) resolveLocalSlot(ctx, varID);
             return &ctx->localArrayMap;
         }
         case INSTANCE_GLOBAL: {
@@ -431,20 +429,23 @@ static Variable* resolveVarDef(VMContext* ctx, uint32_t varRef) {
     return varDef;
 }
 
-// Maps a GML local's varID to its slot position in the current code's localVars array.
+// Maps a GML local's varID to its slot position in the current code's localVars[] (scalar) array.
+// Only used by scalar read/write paths, because array access keys localArrayMap by varID directly.
 //
 // BC16: varIDs for locals are already sequential slot indices (0, 1, 2, ...), so we return the varID unchanged.
 //
-// BC17+: a single GML local (e.g. "menu") can be multiple VARI chunk entries that share a varID.
-// (one for "local.menu" direct access, another for "self.menu [Array]" when the scope is pushed on the stack at runtime).
-// We key by that shared varID via the precomputed currentCodeLocalsSlotMap, so writes and reads via different VARI entries agree on the slot.
+// BC17+: a single GML local (e.g. "menu") can surface as several VARI chunk entries that share a varID.
+// We key by that shared varID via the precomputed currentCodeLocalsSlotMap so reads/writes via any VARI
+// entry agree on the same localVars slot.
+// Array-only locals (like `var __slots`) are NOT in CodeLocals but also never do scalar access, their
+// storage lives entirely in localArrayMap keyed by varID.
 static uint32_t resolveLocalSlot(VMContext* ctx, int32_t varID) {
     if (16 >= ctx->dataWin->gen8.bytecodeVersion || ctx->currentCodeLocalsSlotMap == nullptr) {
         return (uint32_t) varID;
     }
     ptrdiff_t idx = hmgeti(ctx->currentCodeLocalsSlotMap, varID);
     if (idx >= 0) return ctx->currentCodeLocalsSlotMap[idx].value;
-    fprintf(stderr, "VM: Local varID %d not found in CodeLocals for '%s'\n", varID, ctx->currentCodeName);
+    fprintf(stderr, "VM: Scalar access of local varID %d not in CodeLocals for '%s' (array-only locals should never do scalar access)\n", varID, ctx->currentCodeName);
     abort();
 }
 
@@ -574,8 +575,7 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
     if (access.isArray) {
         switch (instanceType) {
             case INSTANCE_LOCAL: {
-                uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
-                RValue result = arrayMapGet(ctx->localArrayMap, localSlot, access.arrayIndex);
+                RValue result = arrayMapGet(ctx->localArrayMap, varDef->varID, access.arrayIndex);
 #ifndef DISABLE_VM_TRACING
                 if (shouldTraceVariable(ctx->varReadsToBeTraced, "local", nullptr, varDef->name)) {
                     char* rvalueAsString = RValue_toStringTyped(result);
@@ -631,12 +631,13 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
     RValue result;
     switch (instanceType) {
         case INSTANCE_LOCAL: {
+            // Scalar access still uses the CodeLocals slot (localVars[] is a fixed-size array indexed by slot), but array-ref detection/creation uses varID directly since localArrayMap is keyed by varID.
             uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
             require(ctx->localVarCount > localSlot);
             if (ctx->localVars[localSlot].type == RVALUE_ARRAY_REF) {
                 result = ctx->localVars[localSlot];
-            } else if (arrayMapHasVariable(ctx->localArrayMap, localSlot)) {
-                result = RValue_makeArrayRef(localSlot);
+            } else if (arrayMapHasVariable(ctx->localArrayMap, varDef->varID)) {
+                result = RValue_makeArrayRef(varDef->varID);
             } else {
                 result = ctx->localVars[localSlot];
             }
@@ -850,8 +851,7 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
     if (access.isArray) {
         switch (instanceType) {
             case INSTANCE_LOCAL: {
-                uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
-                arrayMapSet(&ctx->localArrayMap, localSlot, access.arrayIndex, val);
+                arrayMapSet(&ctx->localArrayMap, varDef->varID, access.arrayIndex, val);
                 return;
             }
             case INSTANCE_GLOBAL: {
@@ -1219,8 +1219,7 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
         } else {
             switch (instanceType) {
                 case INSTANCE_LOCAL: {
-                    uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
-                    arrayMapSet(&ctx->localArrayMap, localSlot, arrayIndex, val);
+                    arrayMapSet(&ctx->localArrayMap, varDef->varID, arrayIndex, val);
                     break;
                 }
                 case INSTANCE_GLOBAL: {
@@ -2602,7 +2601,8 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     // Resolve CodeLocals for local variable slot mapping
     setCurrentCodeLocals(ctx, resolveCodeLocals(ctx, code->name));
 
-    // Allocate locals - CodeLocals is the authoritative source for local variable count NOT code->localsCount
+    // Allocate locals - CodeLocals is the authoritative source for local variable count NOT code->localsCount.
+    // Only scalar locals live in localVars[]; array-only locals live entirely in localArrayMap (keyed by varID).
     uint32_t localsCount = ctx->currentCodeLocals->localVarCount;
     if (localsCount == 0) localsCount = 1; // at least 1 slot to avoid nullptr
     RValue localVars[MAX_CODE_LOCALS];
