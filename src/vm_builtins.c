@@ -1238,6 +1238,15 @@ static RValue builtinRandomize(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_
 
 // ===[ ROOM FUNCTIONS ]===
 
+static RValue builtinGameGetSpeed(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    int32_t type = RValue_toInt32(args[0]);
+    GMLReal fps = (GMLReal) ctx->runner->currentRoom->speed;
+    // gamespeed_fps = 0, gamespeed_microseconds = 1
+    if (type == 0) return RValue_makeReal(fps);
+    return RValue_makeReal((GMLReal) 1000000.0 / fps);
+}
+
 static RValue builtinRoomExists(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
     int32_t roomId = RValue_toInt32(args[0]);
@@ -5450,6 +5459,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "randomize", builtinRandomize);
 
     // Room
+    VM_registerBuiltin(ctx, "game_get_speed", builtinGameGetSpeed);
     VM_registerBuiltin(ctx, "room_exists", builtinRoomExists);
     VM_registerBuiltin(ctx, "room_get_name", builtinRoomGetName);
     VM_registerBuiltin(ctx, "room_goto_next", builtinRoomGotoNext);
