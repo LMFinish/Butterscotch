@@ -505,14 +505,15 @@ int main(int argc, char* argv[]) {
     GlfwFileSystem* glfwFileSystem = GlfwFileSystem_create(args.dataWinPath);
 
     // Init GLFW
-    if(strcmp(args.renderer, "legacy-gl") == 0)
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
     if (!glfwInit()) {
         fprintf(stderr, "Failed to initialize GLFW\n");
         DataWin_free(dataWin);
         freeCommandLineArgs(&args);
         return 1;
     }
+
+    if (strcmp(args.renderer, "legacy-gl") == 0)
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
 
     if (args.headless) {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
