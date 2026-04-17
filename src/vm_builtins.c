@@ -112,6 +112,8 @@ int16_t VMBuiltins_resolveBuiltinVarId(const char* name) {
     if (strcmp(name, "sprite_index") == 0) return BUILTIN_VAR_SPRITE_INDEX;
     if (strcmp(name, "sprite_width") == 0) return BUILTIN_VAR_SPRITE_WIDTH;
     if (strcmp(name, "sprite_height") == 0) return BUILTIN_VAR_SPRITE_HEIGHT;
+    if (strcmp(name, "sprite_xoffset") == 0) return BUILTIN_VAR_SPRITE_XOFFSET;
+    if (strcmp(name, "sprite_yoffset") == 0) return BUILTIN_VAR_SPRITE_YOFFSET;
     if (strcmp(name, "bbox_left") == 0) return BUILTIN_VAR_BBOX_LEFT;
     if (strcmp(name, "bbox_right") == 0) return BUILTIN_VAR_BBOX_RIGHT;
     if (strcmp(name, "bbox_top") == 0) return BUILTIN_VAR_BBOX_TOP;
@@ -313,6 +315,18 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
         if (builtinVarId == BUILTIN_VAR_SPRITE_HEIGHT) {
             if (inst->spriteIndex >= 0 && runner->dataWin->sprt.count > (uint32_t) inst->spriteIndex) {
                 return RValue_makeReal((GMLReal) runner->dataWin->sprt.sprites[inst->spriteIndex].height * inst->imageYscale);
+            }
+            return RValue_makeReal(0.0);
+        }
+        if (builtinVarId == BUILTIN_VAR_SPRITE_XOFFSET) {
+            if (inst->spriteIndex >= 0 && runner->dataWin->sprt.count > (uint32_t) inst->spriteIndex) {
+                return RValue_makeReal((GMLReal) runner->dataWin->sprt.sprites[inst->spriteIndex].originX);
+            }
+            return RValue_makeReal(0.0);
+        }
+        if (builtinVarId == BUILTIN_VAR_SPRITE_YOFFSET) {
+            if (inst->spriteIndex >= 0 && runner->dataWin->sprt.count > (uint32_t) inst->spriteIndex) {
+                return RValue_makeReal((GMLReal) runner->dataWin->sprt.sprites[inst->spriteIndex].originY);
             }
             return RValue_makeReal(0.0);
         }
