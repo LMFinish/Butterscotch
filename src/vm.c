@@ -16,7 +16,7 @@
 #include "stb_ds.h"
 
 // Maximum number of local variables per code entry (stack-allocated arrays in VM_executeCode/VM_callCodeIndex)
-#define MAX_CODE_LOCALS 64
+#define MAX_CODE_LOCALS 128
 
 // ===[ Stack Operations ]===
 
