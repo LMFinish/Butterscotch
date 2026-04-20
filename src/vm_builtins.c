@@ -1061,12 +1061,16 @@ static RValue builtinStringInsert(MAYBE_UNUSED VMContext* ctx, RValue* args, int
 }
 
 static RValue builtinStringReplaceAll(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
-    if (3 > argCount || args[0].type != RVALUE_STRING || args[1].type != RVALUE_STRING || args[2].type != RVALUE_STRING) return RValue_makeOwnedString(safeStrdup(""));
-    const char* str = args[0].string != nullptr ? args[0].string : "";
-    const char* needle = args[1].string != nullptr ? args[1].string : "";
-    const char* replacement = args[2].string != nullptr ? args[2].string : "";
+    if (3 > argCount) return RValue_makeOwnedString(safeStrdup(""));
+    char* str = RValue_toString(args[0]);
+    char* needle = RValue_toString(args[1]);
     int32_t needleLen = (int32_t) strlen(needle);
-    if (0 == needleLen) return RValue_makeOwnedString(safeStrdup(str));
+    if (0 == needleLen) {
+        free(needle);
+        return RValue_makeOwnedString(str);
+    }
+
+    char* replacement = RValue_toString(args[2]);
     int32_t replacementLen = (int32_t) strlen(replacement);
 
     // Count occurrences to pre-allocate
@@ -1089,6 +1093,11 @@ static RValue builtinStringReplaceAll(MAYBE_UNUSED VMContext* ctx, RValue* args,
         p = match + needleLen;
     }
     strcpy(out, p);
+
+    free(replacement);
+    free(needle);
+    free(str);
+
     return RValue_makeOwnedString(result);
 }
 
