@@ -575,7 +575,7 @@ int main(int argc, char* argv[]) {
             .parseGen8 = true,
             .parseOptn = true,
             .parseLang = true,
-            .parseExtn = true,
+            .parseExtn = false,
             .parseSond = true,
             .parseAgrp = true,
             .parseSprt = true,

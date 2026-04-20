@@ -349,6 +349,7 @@ static void parseLANG(BinaryReader* reader, DataWin* dw) {
 }
 
 static void parseEXTN(BinaryReader* reader, DataWin* dw) {
+    // TODO: Update EXTN parser because it is broken for newer GM:S 2 versions
     Extn* e = &dw->extn;
 
     uint32_t extCount;
