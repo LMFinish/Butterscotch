@@ -5837,6 +5837,16 @@ static RValue builtinPathStart(VMContext* ctx, RValue* args, int32_t argCount) {
     return RValue_makeUndefined();
 }
 
+// path_get_length(path) - returns total length of the path in pixels
+static RValue builtinPathGetLength(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeReal(0.0);
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t pathIdx = RValue_toInt32(args[0]);
+    if (0 > pathIdx) return RValue_makeReal(0.0);
+    if ((uint32_t) pathIdx >= runner->dataWin->path.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) runner->dataWin->path.paths[pathIdx].length);
+}
+
 // path_end() - HTML5: Assign_Path(-1,...)
 static RValue builtinPathEnd(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Instance* inst = (Instance*) ctx->currentInstance;
@@ -6545,6 +6555,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     // Path
     VM_registerBuiltin(ctx, "path_start", builtinPathStart);
     VM_registerBuiltin(ctx, "path_end", builtinPathEnd);
+    VM_registerBuiltin(ctx, "path_get_length", builtinPathGetLength);
 
     // Misc
     VM_registerBuiltin(ctx, "get_timer", builtin_get_timer);
