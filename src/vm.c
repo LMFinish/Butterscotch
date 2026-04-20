@@ -850,7 +850,9 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
             if (val.type == RVALUE_STRING && val.string != nullptr) {
                 ctx->scriptArgs[writeIndex] = RValue_makeOwnedString(safeStrdup(val.string));
             } else {
+                // Transfer ownership from val into scriptArgs: copy the tagged union as-is and neutralize val so the RValue_free below is a no-op for arrays/methods.
                 ctx->scriptArgs[writeIndex] = val;
+                val.ownsString = false;
             }
             if (writeIndex >= ctx->scriptArgCount) {
                 ctx->scriptArgCount = writeIndex + 1;
