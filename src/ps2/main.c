@@ -896,7 +896,11 @@ int main(int argc, char* argv[]) {
                     profilerFramesInWindow = 0;
                 }
                 float profilerY = 10.0f + (15.6f * 5.0f) + 6.0f;
+#ifdef ENABLE_VM_PROFILER
                 const char* profilerDisplay = profilerOverlayText[0] != '\0' ? profilerOverlayText : "GML Profiler (collecting...)";
+#else
+                const char* profilerDisplay = "Butterscotch GML Profiler is disabled on this build :(";
+#endif
                 gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, profilerY, 10, 0.35f, debugColor, profilerDisplay);
             }
         }

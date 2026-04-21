@@ -46,6 +46,9 @@ target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(butterscotch PUBLIC vendor/stb/ds)
 
 if(PLATFORM STREQUAL "glfw")
+    # Enable Butterscotch VM/interpreter profiler
+    add_compile_definitions(ENABLE_VM_PROFILER)
+
     # GLAD
     add_library(glad STATIC vendor/glad/src/glad.c)
     target_include_directories(glad PUBLIC vendor/glad/include)

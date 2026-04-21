@@ -2518,8 +2518,10 @@ static void handleBreak(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
 
 static RValue executeLoop(VMContext* ctx) {
     while (ctx->codeEnd > ctx->ip) {
+#ifdef ENABLE_VM_PROFILER
         if (ctx->profiler != nullptr)
             Profiler_tickInstruction(ctx->profiler);
+#endif
         uint32_t instrAddr = ctx->ip;
         uint32_t instr = BinaryUtils_readUint32(ctx->bytecodeBase + ctx->ip);
         ctx->ip += 4;
@@ -2924,9 +2926,13 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     int32_t savedSavearefBalance = ctx->savearefBalance;
     ctx->savearefBalance = 0;
 
+#ifdef ENABLE_VM_PROFILER
     Profiler_enter(ctx->profiler, code->name);
+#endif
     RValue result = executeLoop(ctx);
+#ifdef ENABLE_VM_PROFILER
     Profiler_exit(ctx->profiler);
+#endif
 
     requireMessage(ctx->savearefBalance == 0, "SAVEAREF/RESTOREAREF imbalance at end of VM_executeCode (unpaired SAVEAREF)");
     ctx->savearefBalance = savedSavearefBalance;
@@ -3010,9 +3016,13 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     ctx->savearefBalance = 0;
 
     // Execute the callee
+#ifdef ENABLE_VM_PROFILER
     Profiler_enter(ctx->profiler, code->name);
+#endif
     RValue result = executeLoop(ctx);
+#ifdef ENABLE_VM_PROFILER
     Profiler_exit(ctx->profiler);
+#endif
 
     requireMessage(ctx->savearefBalance == 0, "SAVEAREF/RESTOREAREF imbalance at end of VM_callCodeIndex (unpaired SAVEAREF)");
 
