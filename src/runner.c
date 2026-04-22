@@ -1198,12 +1198,25 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     return runner;
 }
 
-Instance* Runner_createInstance(Runner* runner, GMLReal x, GMLReal y, int32_t objectIndex) {
-    if (isObjectDisabled(runner, objectIndex)) return nullptr;
-    Instance* inst = createAndInitInstance(runner, runner->nextInstanceId++, objectIndex, x, y);
+static inline void dispatchInstanceCreationEvents(Runner* runner, Instance* inst) {
     inst->createEventFired = true;
     Runner_executeEvent(runner, inst, EVENT_PRECREATE, 0);
     Runner_executeEvent(runner, inst, EVENT_CREATE, 0);
+}
+
+Instance* Runner_createInstance(Runner* runner, GMLReal x, GMLReal y, int32_t objectIndex) {
+    if (isObjectDisabled(runner, objectIndex)) return nullptr;
+    Instance* inst = createAndInitInstance(runner, runner->nextInstanceId++, objectIndex, x, y);
+    dispatchInstanceCreationEvents(runner, inst);
+    return inst;
+}
+
+// Same as Runner_createInstance, but sets depth BEFORE firing Create events so scripts like scr_depth can override.
+Instance* Runner_createInstanceWithDepth(Runner* runner, GMLReal x, GMLReal y, int32_t objectIndex, int32_t depth) {
+    if (isObjectDisabled(runner, objectIndex)) return nullptr;
+    Instance* inst = createAndInitInstance(runner, runner->nextInstanceId++, objectIndex, x, y);
+    inst->depth = depth;
+    dispatchInstanceCreationEvents(runner, inst);
     return inst;
 }
 

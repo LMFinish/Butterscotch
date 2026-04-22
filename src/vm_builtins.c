@@ -3379,12 +3379,11 @@ static RValue builtinInstanceCreateDepth(VMContext* ctx, RValue* args, int32_t a
         return RValue_makeReal(0.0);
     }
     Instance* callerInst = (Instance*) ctx->currentInstance;
-    Instance* inst = Runner_createInstance(runner, x, y, objectIndex);
+    Instance* inst = Runner_createInstanceWithDepth(runner, x, y, objectIndex, depth);
     if (inst == nullptr) return RValue_makeReal(-4.0); // noone
     if (callerInst != nullptr && ctx->creatorVarID >= 0) {
         Instance_setSelfVar(inst, ctx->creatorVarID, RValue_makeReal((GMLReal) callerInst->instanceId));
     }
-    inst->depth = depth;
     return RValue_makeReal((GMLReal) inst->instanceId);
 }
 
