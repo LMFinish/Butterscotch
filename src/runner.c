@@ -1114,6 +1114,13 @@ static void cleanupState(Runner* runner) {
     arrfree(runner->dsListPool);
     runner->dsListPool = nullptr;
 
+    // Free mp_grid pool
+    repeat((int32_t) arrlen(runner->mpGridPool), i) {
+        free(runner->mpGridPool[i].cells);
+    }
+    arrfree(runner->mpGridPool);
+    runner->mpGridPool = nullptr;
+
     // Free INI state
     if (runner->currentIni != nullptr) {
         Ini_free(runner->currentIni);

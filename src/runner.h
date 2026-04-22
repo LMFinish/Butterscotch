@@ -233,6 +233,18 @@ typedef struct {
     bool isValid;        // false after buffer_delete (tombstone)
 } GmlBuffer;
 
+// Motion planning grid used by mp_grid_* builtins. Cell value 1 = blocked.
+typedef struct {
+    bool inUse;
+    GMLReal left;
+    GMLReal top;
+    int32_t hcells;
+    int32_t vcells;
+    GMLReal cellWidth;
+    GMLReal cellHeight;
+    uint8_t* cells;
+} MpGrid;
+
 // Open text file handle for GML file_text_* functions
 #define MAX_OPEN_TEXT_FILES 32
 typedef struct {
@@ -304,6 +316,7 @@ typedef struct Runner {
     DsMapEntry** dsMapPool; // stb_ds array of stb_ds hashmaps
     DsList* dsListPool; // stb_ds array of DsList
     GmlBuffer* gmlBufferPool; // stb_ds array of GmlBuffer
+    MpGrid* mpGridPool; // stb_ds array of motion-planning grids
 
     // Motion planning potential field settings
     GMLReal mpPotMaxrot;

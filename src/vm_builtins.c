@@ -4408,7 +4408,7 @@ static RValue builtin_drawTextTransformed(VMContext* ctx, RValue* args, MAYBE_UN
 
 static RValue builtin_drawTextExt(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     logSemiStubbedFunction(ctx, "draw_text_ext");
-    
+
     Runner* runner = (Runner*) ctx->runner;
     if (runner->renderer == nullptr) return RValue_makeUndefined();
 
@@ -6144,6 +6144,343 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
 
 // ===[ PATH FUNCTIONS ]===
 
+// path_add() - create a new empty path, return its index
+static RValue builtinPathAdd(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    PathChunk* pc = &runner->dataWin->path;
+    uint32_t newIdx = pc->count;
+    GamePath* paths = (GamePath*) realloc(pc->paths, (newIdx + 1) * sizeof(GamePath));
+    if (paths == nullptr) return RValue_makeInt32(-1);
+    pc->paths = paths;
+    GamePath* p = &paths[newIdx];
+    memset(p, 0, sizeof(GamePath));
+    p->name = "";
+    p->isSmooth = false;
+    p->isClosed = false;
+    p->precision = 4;
+    p->pointCount = 0;
+    p->points = nullptr;
+    p->internalPointCount = 0;
+    p->internalPoints = nullptr;
+    p->length = 0.0;
+    pc->count = newIdx + 1;
+    return RValue_makeInt32((int32_t) newIdx);
+}
+
+// path_clear_points(path)
+static RValue builtinPathClearPoints(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t idx = RValue_toInt32(args[0]);
+    if (0 > idx || (uint32_t) idx >= runner->dataWin->path.count) return RValue_makeUndefined();
+    GamePath* p = &runner->dataWin->path.paths[idx];
+    free(p->points);
+    p->points = nullptr;
+    p->pointCount = 0;
+    free(p->internalPoints);
+    p->internalPoints = nullptr;
+    p->internalPointCount = 0;
+    p->length = 0.0;
+    return RValue_makeUndefined();
+}
+
+// path_add_point(path, x, y, speed)
+static RValue builtinPathAddPoint(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (4 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t idx = RValue_toInt32(args[0]);
+    if (0 > idx || (uint32_t) idx >= runner->dataWin->path.count) return RValue_makeUndefined();
+    GamePath* p = &runner->dataWin->path.paths[idx];
+    PathPoint* pts = (PathPoint*) realloc(p->points, (p->pointCount + 1) * sizeof(PathPoint));
+    if (pts == nullptr) return RValue_makeUndefined();
+    p->points = pts;
+    pts[p->pointCount].x = (float) RValue_toReal(args[1]);
+    pts[p->pointCount].y = (float) RValue_toReal(args[2]);
+    pts[p->pointCount].speed = (float) RValue_toReal(args[3]);
+    p->pointCount++;
+    GamePath_computeInternal(p);
+    return RValue_makeUndefined();
+}
+
+// path_exists(path)
+static RValue builtinPathExists(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeBool(false);
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t idx = RValue_toInt32(args[0]);
+    bool exists = (idx >= 0) && ((uint32_t) idx < runner->dataWin->path.count);
+    return RValue_makeBool(exists);
+}
+
+// path_delete(path) - we don't reclaim the slot (would require remapping indices); zero it out
+static RValue builtinPathDelete(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t idx = RValue_toInt32(args[0]);
+    if (0 > idx || (uint32_t) idx >= runner->dataWin->path.count) return RValue_makeUndefined();
+    GamePath* p = &runner->dataWin->path.paths[idx];
+    free(p->points); p->points = nullptr; p->pointCount = 0;
+    free(p->internalPoints); p->internalPoints = nullptr; p->internalPointCount = 0;
+    p->length = 0.0;
+    return RValue_makeUndefined();
+}
+
+// ===[ MP_GRID FUNCTIONS ]===
+
+static MpGrid* mpGridGet(Runner* runner, int32_t id) {
+    if (0 > id || (int32_t) arrlen(runner->mpGridPool) <= id) return nullptr;
+    MpGrid* g = &runner->mpGridPool[id];
+    if (!g->inUse) return nullptr;
+    return g;
+}
+
+// mp_grid_create(left, top, hcells, vcells, cellwidth, cellheight)
+static RValue builtinMpGridCreate(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (6 > argCount) return RValue_makeInt32(-1);
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid g;
+    g.inUse = true;
+    g.left = RValue_toReal(args[0]);
+    g.top = RValue_toReal(args[1]);
+    g.hcells = RValue_toInt32(args[2]);
+    g.vcells = RValue_toInt32(args[3]);
+    g.cellWidth = RValue_toReal(args[4]);
+    g.cellHeight = RValue_toReal(args[5]);
+    if (g.hcells <= 0 || g.vcells <= 0) return RValue_makeInt32(-1);
+    g.cells = (uint8_t*) calloc((size_t) g.hcells * (size_t) g.vcells, 1);
+    int32_t id = (int32_t) arrlen(runner->mpGridPool);
+    arrput(runner->mpGridPool, g);
+    return RValue_makeInt32(id);
+}
+
+static RValue builtinMpGridDestroy(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    MpGrid* g = mpGridGet(runner, id);
+    if (g == nullptr) return RValue_makeUndefined();
+    free(g->cells);
+    g->cells = nullptr;
+    g->inUse = false;
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridClearAll(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeUndefined();
+    memset(g->cells, 0, (size_t) g->hcells * (size_t) g->vcells);
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridAddCell(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeUndefined();
+    int32_t cx = RValue_toInt32(args[1]);
+    int32_t cy = RValue_toInt32(args[2]);
+    if (cx < 0 || cy < 0 || cx >= g->hcells || cy >= g->vcells) return RValue_makeUndefined();
+    g->cells[cx * g->vcells + cy] = 1;
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridClearCell(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeUndefined();
+    int32_t cx = RValue_toInt32(args[1]);
+    int32_t cy = RValue_toInt32(args[2]);
+    if (cx < 0 || cy < 0 || cx >= g->hcells || cy >= g->vcells) return RValue_makeUndefined();
+    g->cells[cx * g->vcells + cy] = 0;
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridAddRectangle(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (5 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeUndefined();
+    int32_t x1 = RValue_toInt32(args[1]);
+    int32_t y1 = RValue_toInt32(args[2]);
+    int32_t x2 = RValue_toInt32(args[3]);
+    int32_t y2 = RValue_toInt32(args[4]);
+    if (x1 < 0) x1 = 0; if (y1 < 0) y1 = 0;
+    if (x2 >= g->hcells) x2 = g->hcells - 1;
+    if (y2 >= g->vcells) y2 = g->vcells - 1;
+    for (int32_t cx = x1; x2 >= cx; cx++) {
+        for (int32_t cy = y1; y2 >= cy; cy++) {
+            g->cells[cx * g->vcells + cy] = 1;
+        }
+    }
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridClearRectangle(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (5 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeUndefined();
+    int32_t x1 = RValue_toInt32(args[1]);
+    int32_t y1 = RValue_toInt32(args[2]);
+    int32_t x2 = RValue_toInt32(args[3]);
+    int32_t y2 = RValue_toInt32(args[4]);
+    if (x1 < 0) x1 = 0; if (y1 < 0) y1 = 0;
+    if (x2 >= g->hcells) x2 = g->hcells - 1;
+    if (y2 >= g->vcells) y2 = g->vcells - 1;
+    for (int32_t cx = x1; x2 >= cx; cx++) {
+        for (int32_t cy = y1; y2 >= cy; cy++) {
+            g->cells[cx * g->vcells + cy] = 0;
+        }
+    }
+    return RValue_makeUndefined();
+}
+
+static RValue builtinMpGridGetCell(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeInt32(0);
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeInt32(0);
+    int32_t cx = RValue_toInt32(args[1]);
+    int32_t cy = RValue_toInt32(args[2]);
+    if (cx < 0 || cy < 0 || cx >= g->hcells || cy >= g->vcells) return RValue_makeInt32(0);
+    // Native returns -1 for blocked, 0 for clear
+    return RValue_makeInt32(g->cells[cx * g->vcells + cy] ? -1 : 0);
+}
+
+static RValue builtinMpGridDraw(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    return RValue_makeUndefined();
+}
+
+// mp_grid_path(id, path, xstart, ystart, xgoal, ygoal, allowDiagonals)
+// BFS pathfinder: fills `path` with cell-center waypoints from start to goal.
+// Returns true if a path was found.
+static RValue builtinMpGridPath(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (7 > argCount) return RValue_makeBool(false);
+    Runner* runner = (Runner*) ctx->runner;
+    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (g == nullptr) return RValue_makeBool(false);
+    int32_t pathIdx = RValue_toInt32(args[1]);
+    if (0 > pathIdx || (uint32_t) pathIdx >= runner->dataWin->path.count) return RValue_makeBool(false);
+    GamePath* outPath = &runner->dataWin->path.paths[pathIdx];
+
+    GMLReal xs = RValue_toReal(args[2]);
+    GMLReal ys = RValue_toReal(args[3]);
+    GMLReal xg = RValue_toReal(args[4]);
+    GMLReal yg = RValue_toReal(args[5]);
+    bool allowDiag = RValue_toBool(args[6]);
+
+    int32_t sx = (int32_t) floor((xs - g->left) / g->cellWidth);
+    int32_t sy = (int32_t) floor((ys - g->top) / g->cellHeight);
+    int32_t gx = (int32_t) floor((xg - g->left) / g->cellWidth);
+    int32_t gy = (int32_t) floor((yg - g->top) / g->cellHeight);
+
+    if (sx < 0 || sx >= g->hcells || sy < 0 || sy >= g->vcells) return RValue_makeBool(false);
+    if (gx < 0 || gx >= g->hcells || gy < 0 || gy >= g->vcells) return RValue_makeBool(false);
+    if (g->cells[sx * g->vcells + sy]) return RValue_makeBool(false);
+    if (g->cells[gx * g->vcells + gy]) return RValue_makeBool(false);
+
+    int32_t total = g->hcells * g->vcells;
+    int32_t* parent = (int32_t*) malloc(total * sizeof(int32_t));
+    int32_t* queue = (int32_t*) malloc(total * sizeof(int32_t));
+    if (parent == nullptr || queue == nullptr) {
+        free(parent); free(queue);
+        return RValue_makeBool(false);
+    }
+    for (int32_t i = 0; total > i; i++) parent[i] = -1;
+
+    int32_t startIdx = sx * g->vcells + sy;
+    int32_t goalIdx = gx * g->vcells + gy;
+    int32_t head = 0, tail = 0;
+    queue[tail++] = startIdx;
+    parent[startIdx] = startIdx;
+
+    int32_t dx4[4] = { 1, -1, 0, 0 };
+    int32_t dy4[4] = { 0, 0, 1, -1 };
+    int32_t dx8[8] = { 1, -1, 0, 0, 1, 1, -1, -1 };
+    int32_t dy8[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
+    int32_t* dxs = allowDiag ? dx8 : dx4;
+    int32_t* dys = allowDiag ? dy8 : dy4;
+    int32_t dirCount = allowDiag ? 8 : 4;
+
+    bool found = false;
+    while (tail > head) {
+        int32_t cur = queue[head++];
+        if (cur == goalIdx) { found = true; break; }
+        int32_t cxx = cur / g->vcells;
+        int32_t cyy = cur % g->vcells;
+        for (int32_t d = 0; dirCount > d; d++) {
+            int32_t nx = cxx + dxs[d];
+            int32_t ny = cyy + dys[d];
+            if (nx < 0 || ny < 0 || nx >= g->hcells || ny >= g->vcells) continue;
+            int32_t nidx = nx * g->vcells + ny;
+            if (parent[nidx] != -1) continue;
+            if (g->cells[nidx]) continue;
+            // For diagonal moves, require both cardinal neighbors to be clear
+            if (allowDiag && d >= 4) {
+                int32_t aIdx = cxx * g->vcells + ny;
+                int32_t bIdx = nx * g->vcells + cyy;
+                if (g->cells[aIdx] || g->cells[bIdx]) continue;
+            }
+            parent[nidx] = cur;
+            queue[tail++] = nidx;
+        }
+    }
+
+    if (!found) {
+        free(parent); free(queue);
+        return RValue_makeBool(false);
+    }
+
+    // Reconstruct path from goal back to start
+    int32_t chainCap = 16;
+    int32_t chainLen = 0;
+    int32_t* chain = (int32_t*) malloc(chainCap * sizeof(int32_t));
+    int32_t node = goalIdx;
+    while (true) {
+        if (chainLen >= chainCap) {
+            chainCap *= 2;
+            chain = (int32_t*) realloc(chain, chainCap * sizeof(int32_t));
+        }
+        chain[chainLen++] = node;
+        if (node == startIdx) break;
+        node = parent[node];
+    }
+
+    // Clear old path and add points in forward order
+    free(outPath->points);
+    outPath->points = nullptr;
+    outPath->pointCount = 0;
+
+    outPath->points = (PathPoint*) malloc(chainLen * sizeof(PathPoint));
+    outPath->pointCount = (uint32_t) chainLen;
+    for (int32_t i = 0; chainLen > i; i++) {
+        int32_t idx = chain[chainLen - 1 - i];
+        int32_t cxx = idx / g->vcells;
+        int32_t cyy = idx % g->vcells;
+        float wx = (float) (g->left + (cxx + 0.5) * g->cellWidth);
+        float wy = (float) (g->top + (cyy + 0.5) * g->cellHeight);
+        // Override endpoints with exact start/goal coords so the instance aligns
+        if (i == 0) { wx = (float) xs; wy = (float) ys; }
+        if (i == chainLen - 1) { wx = (float) xg; wy = (float) yg; }
+        outPath->points[i].x = wx;
+        outPath->points[i].y = wy;
+        outPath->points[i].speed = 100.0f;
+    }
+    free(chain);
+    free(parent);
+    free(queue);
+
+    free(outPath->internalPoints);
+    outPath->internalPoints = nullptr;
+    outPath->internalPointCount = 0;
+    outPath->length = 0.0;
+    GamePath_computeInternal(outPath);
+
+    return RValue_makeBool(true);
+}
+
 // path_start(path, speed, endaction, absolute) - HTML5: Assign_Path (yyInstance.js:2695-2743)
 static RValue builtinPathStart(VMContext* ctx, RValue* args, int32_t argCount) {
     if (4 > argCount) return RValue_makeUndefined();
@@ -6931,6 +7268,23 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "path_start", builtinPathStart);
     VM_registerBuiltin(ctx, "path_end", builtinPathEnd);
     VM_registerBuiltin(ctx, "path_get_length", builtinPathGetLength);
+    VM_registerBuiltin(ctx, "path_add", builtinPathAdd);
+    VM_registerBuiltin(ctx, "path_clear_points", builtinPathClearPoints);
+    VM_registerBuiltin(ctx, "path_add_point", builtinPathAddPoint);
+    VM_registerBuiltin(ctx, "path_exists", builtinPathExists);
+    VM_registerBuiltin(ctx, "path_delete", builtinPathDelete);
+
+    // Motion planning grid
+    VM_registerBuiltin(ctx, "mp_grid_create", builtinMpGridCreate);
+    VM_registerBuiltin(ctx, "mp_grid_destroy", builtinMpGridDestroy);
+    VM_registerBuiltin(ctx, "mp_grid_clear_all", builtinMpGridClearAll);
+    VM_registerBuiltin(ctx, "mp_grid_add_cell", builtinMpGridAddCell);
+    VM_registerBuiltin(ctx, "mp_grid_clear_cell", builtinMpGridClearCell);
+    VM_registerBuiltin(ctx, "mp_grid_add_rectangle", builtinMpGridAddRectangle);
+    VM_registerBuiltin(ctx, "mp_grid_clear_rectangle", builtinMpGridClearRectangle);
+    VM_registerBuiltin(ctx, "mp_grid_get_cell", builtinMpGridGetCell);
+    VM_registerBuiltin(ctx, "mp_grid_draw", builtinMpGridDraw);
+    VM_registerBuiltin(ctx, "mp_grid_path", builtinMpGridPath);
 
     // Misc
     VM_registerBuiltin(ctx, "get_timer", builtin_get_timer);
