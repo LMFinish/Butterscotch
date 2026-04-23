@@ -1789,11 +1789,10 @@ void Runner_step(Runner* runner) {
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
 
-        GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
-
         repeat(GML_ALARM_COUNT, alarmIdx) {
             if (inst->alarm[alarmIdx] > 0) {
 #ifdef ENABLE_VM_TRACING
+                GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
                 if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
                     fprintf(stderr, "VM: [%s] Ticking down Alarm[%d] (instanceId=%d), current tick is %d\n", object->name, alarmIdx, inst->instanceId, inst->alarm[alarmIdx]);
                 }
