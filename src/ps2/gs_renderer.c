@@ -1304,15 +1304,10 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
     uint8_t b = BGR_B(color) >> 1;
     u64 textColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
-    float combinedScaleX = xscale * font->scaleX;
-    float combinedScaleY = yscale * font->scaleY;
-
-    float gsScaleX = gs->scaleX;
-    float gsScaleY = gs->scaleY;
-    float gsOffsetX = gs->offsetX;
-    float gsOffsetY = gs->offsetY;
-    float gsViewX = (float) gs->viewX;
-    float gsViewY = (float) gs->viewY;
+    float screenScaleX = xscale * font->scaleX * gs->scaleX;
+    float screenScaleY = yscale * font->scaleY * gs->scaleY;
+    float screenBaseX = (x - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float screenBaseY = (y - (float) gs->viewY) * gs->scaleY + gs->offsetY;
 
     int32_t textLen = (int32_t) strlen(text);
 
@@ -1366,15 +1361,10 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
                     continue;
                 }
 
-                float glyphX = x + localX0 * combinedScaleX;
-                float glyphY = y + localY0 * combinedScaleY;
-                float glyphW = (float) glyph->sourceWidth * combinedScaleX;
-                float glyphH = (float) glyph->sourceHeight * combinedScaleY;
-
-                float sx1 = (glyphX - gsViewX) * gsScaleX + gsOffsetX;
-                float sy1 = (glyphY - gsViewY) * gsScaleY + gsOffsetY;
-                float sx2 = (glyphX + glyphW - gsViewX) * gsScaleX + gsOffsetX;
-                float sy2 = (glyphY + glyphH - gsViewY) * gsScaleY + gsOffsetY;
+                float sx1 = localX0 * screenScaleX + screenBaseX;
+                float sy1 = localY0 * screenScaleY + screenBaseY;
+                float sx2 = sx1 + (float) glyph->sourceWidth * screenScaleX;
+                float sy2 = sy1 + (float) glyph->sourceHeight * screenScaleY;
 
                 gsKit_prim_sprite_texture(gs->gsGlobal, &glyphTex, sx1, sy1, u0, v0, sx2, sy2, u1, v1, 0, textColor);
             }
@@ -1414,15 +1404,10 @@ static void gsDrawTextColor(Renderer* renderer, const char* text, float x, float
     int32_t textLen = (int32_t) strlen(text);
     if(textLen == 0) return;
 
-    float combinedScaleX = xscale * font->scaleX;
-    float combinedScaleY = yscale * font->scaleY;
-
-    float gsScaleX = gs->scaleX;
-    float gsScaleY = gs->scaleY;
-    float gsOffsetX = gs->offsetX;
-    float gsOffsetY = gs->offsetY;
-    float gsViewX = (float) gs->viewX;
-    float gsViewY = (float) gs->viewY;
+    float screenScaleX = xscale * font->scaleX * gs->scaleX;
+    float screenScaleY = yscale * font->scaleY * gs->scaleY;
+    float screenBaseX = (x - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float screenBaseY = (y - (float) gs->viewY) * gs->scaleY + gs->offsetY;
 
     // Vertical alignment
     int32_t lineCount = TextUtils_countLines(text, textLen);
@@ -1527,15 +1512,10 @@ static void gsDrawTextColor(Renderer* renderer, const char* text, float x, float
                     continue;
                 }
 
-                float glyphX = x + localX0 * combinedScaleX;
-                float glyphY = y + localY0 * combinedScaleY;
-                float glyphW = (float) glyph->sourceWidth * combinedScaleX;
-                float glyphH = (float) glyph->sourceHeight * combinedScaleY;
-
-                float sx1 = (glyphX - gsViewX) * gsScaleX + gsOffsetX;
-                float sy1 = (glyphY - gsViewY) * gsScaleY + gsOffsetY;
-                float sx2 = (glyphX + glyphW - gsViewX) * gsScaleX + gsOffsetX;
-                float sy2 = (glyphY + glyphH - gsViewY) * gsScaleY + gsOffsetY;
+                float sx1 = localX0 * screenScaleX + screenBaseX;
+                float sy1 = localY0 * screenScaleY + screenBaseY;
+                float sx2 = sx1 + (float) glyph->sourceWidth * screenScaleX;
+                float sy2 = sy1 + (float) glyph->sourceHeight * screenScaleY;
 
                 gsKit_prim_triangle_goraud_texture_3d(gs->gsGlobal, &glyphTex,
                         sx1, sy1, 0, u0, v0,
