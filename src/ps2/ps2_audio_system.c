@@ -767,11 +767,12 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
     Ps2AudoEntry* audoForSize = &ps2->audoEntries[sond->audoIndex];
     uint32_t decodedPcmBytes = audoForSize->dataSize * 2 * (uint32_t) sizeof(int16_t);
     if ((isEmbedded || isCompressed) && decodedPcmBytes > PS2_SFX_CACHE_MAX_BYTES) {
-        fprintf(stderr, "PS2AudioSystem: Sound %" PRId32 " (audo %d) is flagged embedded but would need %" PRIu32 " bytes of PCM! Streaming instead...\n", soundIndex, sond->audoIndex, decodedPcmBytes);
+        fprintf(stderr, "PS2AudioSystem: Sound %" PRId32 " (audo %d) would need %" PRIu32 " bytes of PCM in the cache! isEmbedded? %s; isCompressed? %s; Streaming instead...\n", soundIndex, sond->audoIndex, decodedPcmBytes, isEmbedded ? "true" : "false", isCompressed ? "true" : "false");
         isEmbedded = false;
+        isCompressed = false;
     }
 
-    if (!isEmbedded || !isCompressed) {
+    if (!isEmbedded && !isCompressed) {
         // ===[ Streaming music path ]===
         // Find a free music stream slot
         Ps2MusicStream* stream = nullptr;
