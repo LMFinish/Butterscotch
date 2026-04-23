@@ -1404,7 +1404,8 @@ static void dispatchCollisionEvents(Runner* runner) {
         if (!self->active) continue;
 
         InstanceBBox bboxSelf;
-        bool bboxSelfDirty = true;
+        Sprite* sprSelf;
+        bool selfDirty = true;
 
         // Walk the parent chain to find all collision event handlers for this object
         int32_t currentObj = self->objectIndex;
@@ -1412,54 +1413,52 @@ static void dispatchCollisionEvents(Runner* runner) {
         while (currentObj >= 0 && dataWin->objt.count > (uint32_t) currentObj && 32 > depth) {
             GameObject* obj = &dataWin->objt.objects[currentObj];
 
-            if (OBJT_EVENT_TYPE_COUNT > EVENT_COLLISION) {
-                ObjectEventList* eventList = &obj->eventLists[EVENT_COLLISION];
-                repeat(eventList->eventCount, evtIdx) {
-                    ObjectEvent* evt = &eventList->events[evtIdx];
-                    int32_t targetObjIndex = (int32_t) evt->eventSubtype;
+            ObjectEventList* eventList = &obj->eventLists[EVENT_COLLISION];
+            repeat(eventList->eventCount, evtIdx) {
+                ObjectEvent* evt = &eventList->events[evtIdx];
+                int32_t targetObjIndex = (int32_t) evt->eventSubtype;
 
-                    if (evt->actionCount == 0 || 0 > evt->actions[0].codeId) continue;
+                if (evt->actionCount == 0 || 0 > evt->actions[0].codeId) continue;
 
-                    // Check all instances of the target object
-                    repeat(count, j) {
-                        Instance* other = runner->instances[j];
-                        if (!other->active) continue;
-                        if (other == self) continue;
-                        if (!VM_isObjectOrDescendant(dataWin, other->objectIndex, targetObjIndex)) continue;
+                // Check all instances of the target object
+                repeat(count, j) {
+                    Instance* other = runner->instances[j];
+                    if (!other->active) continue;
+                    if (other == self) continue;
+                    if (!VM_isObjectOrDescendant(dataWin, other->objectIndex, targetObjIndex)) continue;
 
-                        // Compute bboxes
-                        if (bboxSelfDirty) {
-                            bboxSelf = Collision_computeBBox(dataWin, self);
-                            bboxSelfDirty = false;
-                        }
-                        InstanceBBox bboxOther = Collision_computeBBox(dataWin, other);
-                        if (!bboxSelf.valid || !bboxOther.valid) continue;
-
-                        // AABB overlap test
-                        if (bboxSelf.left >= bboxOther.right || bboxOther.left >= bboxSelf.right ||
-                            bboxSelf.top >= bboxOther.bottom || bboxOther.top >= bboxSelf.bottom) continue;
-
-                        // Precise collision check if either sprite needs it
-                        Sprite* sprSelf = Collision_getSprite(dataWin, self);
-                        Sprite* sprOther = Collision_getSprite(dataWin, other);
-                        bool needsPrecise = (sprSelf != nullptr && sprSelf->sepMasks == 1) || (sprOther != nullptr && sprOther->sepMasks == 1);
-
-                        if (needsPrecise) {
-                            if (!Collision_instancesOverlapPrecise(dataWin, self, other, bboxSelf, bboxOther)) continue;
-                        }
-
-                        // Collision detected! If either instance is solid, restore both to xprevious/yprevious
-                        if (self->solid || other->solid) {
-                            self->x = self->xprevious;
-                            self->y = self->yprevious;
-                            other->x = other->xprevious;
-                            other->y = other->yprevious;
-                        }
-
-                        executeCollisionEvent(runner, self, other, targetObjIndex);
-                        // The collision event may have moved our instance, so we'll need to regenerate the bbox again!
-                        bboxSelfDirty = true;
+                    // Compute bboxes
+                    if (selfDirty) {
+                        bboxSelf = Collision_computeBBox(dataWin, self);
+                        sprSelf = Collision_getSprite(dataWin, self);
+                        selfDirty = false;
                     }
+                    InstanceBBox bboxOther = Collision_computeBBox(dataWin, other);
+                    if (!bboxSelf.valid || !bboxOther.valid) continue;
+
+                    // AABB overlap test
+                    if (bboxSelf.left >= bboxOther.right || bboxOther.left >= bboxSelf.right || bboxSelf.top >= bboxOther.bottom || bboxOther.top >= bboxSelf.bottom)
+                        continue;
+
+                    // Precise collision check if either sprite needs it
+                    Sprite* sprOther = Collision_getSprite(dataWin, other);
+                    bool needsPrecise = (sprSelf != nullptr && sprSelf->sepMasks == 1) || (sprOther != nullptr && sprOther->sepMasks == 1);
+
+                    if (needsPrecise) {
+                        if (!Collision_instancesOverlapPrecise(dataWin, self, other, bboxSelf, bboxOther)) continue;
+                    }
+
+                    // Collision detected! If either instance is solid, restore both to xprevious/yprevious
+                    if (self->solid || other->solid) {
+                        self->x = self->xprevious;
+                        self->y = self->yprevious;
+                        other->x = other->xprevious;
+                        other->y = other->yprevious;
+                    }
+
+                    executeCollisionEvent(runner, self, other, targetObjIndex);
+                    // The collision event may have moved our instance, so we'll need to regenerate our self attributes!
+                    selfDirty = true;
                 }
             }
 
