@@ -1403,6 +1403,9 @@ static void dispatchCollisionEvents(Runner* runner) {
         Instance* self = runner->instances[i];
         if (!self->active) continue;
 
+        InstanceBBox bboxSelf;
+        bool bboxSelfDirty = true;
+
         // Walk the parent chain to find all collision event handlers for this object
         int32_t currentObj = self->objectIndex;
         int depth = 0;
@@ -1425,7 +1428,10 @@ static void dispatchCollisionEvents(Runner* runner) {
                         if (!VM_isObjectOrDescendant(dataWin, other->objectIndex, targetObjIndex)) continue;
 
                         // Compute bboxes
-                        InstanceBBox bboxSelf = Collision_computeBBox(dataWin, self);
+                        if (bboxSelfDirty) {
+                            bboxSelf = Collision_computeBBox(dataWin, self);
+                            bboxSelfDirty = false;
+                        }
                         InstanceBBox bboxOther = Collision_computeBBox(dataWin, other);
                         if (!bboxSelf.valid || !bboxOther.valid) continue;
 
@@ -1451,6 +1457,8 @@ static void dispatchCollisionEvents(Runner* runner) {
                         }
 
                         executeCollisionEvent(runner, self, other, targetObjIndex);
+                        // The collision event may have moved our instance, so we'll need to regenerate the bbox again!
+                        bboxSelfDirty = true;
                     }
                 }
             }
