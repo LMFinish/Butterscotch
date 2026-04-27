@@ -4,12 +4,9 @@
 #include <stdint.h>
 #include "rvalue.h"
 #include "gml_array.h"
-#include "stb_ds.h"
+#include "int_rvalue_hashmap.h"
 
 #define GML_ALARM_COUNT 12
-
-// Sparse self variable entry for stb_ds int-keyed hashmap
-typedef struct { int32_t key; RValue value; } SelfVarEntry;
 
 typedef struct Instance {
     uint32_t instanceId;
@@ -26,8 +23,8 @@ typedef struct Instance {
     int32_t* collisionCells; // Used to track where we are
     uint32_t lastCollisionQueryId;
 
-    // Per-instance self variable storage (sparse stb_ds hashmap, keyed by varID).
-    SelfVarEntry* selfVars;
+    // Per-instance self variable storage (sparse open-addressed hashmap, keyed by varID).
+    IntRValueHashMap selfVars;
 
     // Built-in instance properties
     int32_t spriteIndex;
@@ -66,11 +63,7 @@ void Instance_copyFields(Instance* dst, Instance* source);
 // Get a self variable by varID. Returns RVALUE_UNDEFINED if absent. The returned RValue is non-owning (weak view - do not RValue_free unless you incRef/strdup first to strengthen).
 static inline RValue Instance_getSelfVar(Instance* inst, int32_t varID) {
     requireNotNull(inst);
-    ptrdiff_t idx = hmgeti(inst->selfVars, varID);
-    if (0 > idx) return (RValue){ .type = RVALUE_UNDEFINED };
-    RValue result = inst->selfVars[idx].value;
-    result.ownsString = false;
-    return result;
+    return IntRValueHashMap_get(&inst->selfVars, varID);
 }
 
 // Set a self variable by varID. Frees the old value if present (decRefs owned arrays).
@@ -78,10 +71,9 @@ static inline RValue Instance_getSelfVar(Instance* inst, int32_t varID) {
 // The caller retains ownership of their original `val` and remains responsible for freeing it (via RValue_free) when done.
 static inline void Instance_setSelfVar(Instance* inst, int32_t varID, RValue val) {
     requireNotNull(inst);
-    ptrdiff_t idx = hmgeti(inst->selfVars, varID);
-    if (idx >= 0) {
-        RValue_free(&inst->selfVars[idx].value);
-    }
+    // One lookup: returns the existing slot, or inserts UNDEFINED and returns the new slot.
+    RValue* slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varID);
+    RValue_free(slot);
     if (val.type == RVALUE_STRING && val.string != nullptr) {
         val = RValue_makeOwnedString(safeStrdup(val.string));
     } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
@@ -93,7 +85,7 @@ static inline void Instance_setSelfVar(Instance* inst, int32_t varID, RValue val
         val.ownsString = true;
 #endif
     }
-    hmput(inst->selfVars, varID, val);
+    *slot = val;
 }
 
 // Recompute speed/direction from hspeed/vspeed (called when hspeed or vspeed is set)

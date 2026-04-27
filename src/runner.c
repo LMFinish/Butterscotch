@@ -189,7 +189,7 @@ static void executeCode(Runner* runner, Instance* instance, int32_t codeId) {
     const char* savedCodeName = vm->currentCodeName;
     RValue* savedLocalVars = vm->localVars;
     uint32_t savedLocalVarCount = vm->localVarCount;
-    LocalSlotEntry* savedCodeLocalsSlotMap = vm->currentCodeLocalsSlotMap;
+    IntIntHashMap* savedCodeLocalsSlotMap = vm->currentCodeLocalsSlotMap;
     int32_t savedCodeIndex = vm->currentCodeIndex;
     int32_t savedStackTop = vm->stack.top;
 
@@ -2236,9 +2236,11 @@ void Runner_dumpState(Runner* runner) {
         // Self variables
         bool hasSelfVars = false;
         bool hasSelfArrays = false;
-        repeat(hmlen(inst->selfVars), svIdx) {
-            int32_t varID = inst->selfVars[svIdx].key;
-            RValue val = inst->selfVars[svIdx].value;
+        repeat(inst->selfVars.capacity, svIdx) {
+            IntRValueEntry* entry = &inst->selfVars.entries[svIdx];
+            if (entry->key == INT_RVALUE_HASHMAP_EMPTY_KEY) continue;
+            int32_t varID = entry->key;
+            RValue val = entry->value;
             if (val.type == RVALUE_UNDEFINED) continue;
 
             const char* varName = "?";
@@ -2442,9 +2444,11 @@ char* Runner_dumpStateJson(Runner* runner) {
         // Self variables (non-array, sparse hashmap)
         JsonWriter_key(&w, "selfVariables");
         JsonWriter_beginObject(&w);
-        repeat(hmlen(inst->selfVars), svIdx) {
-            int32_t varID = inst->selfVars[svIdx].key;
-            RValue val = inst->selfVars[svIdx].value;
+        repeat(inst->selfVars.capacity, svIdx) {
+            IntRValueEntry* entry = &inst->selfVars.entries[svIdx];
+            if (entry->key == INT_RVALUE_HASHMAP_EMPTY_KEY) continue;
+            int32_t varID = entry->key;
+            RValue val = entry->value;
             if (val.type == RVALUE_UNDEFINED) continue;
 
             // Resolve variable name from VARI chunk

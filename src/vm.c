@@ -479,21 +479,10 @@ static uint32_t resolveLocalSlot(VMContext* ctx, int32_t varID) {
     }
 
     // For BC17, we'll allocate the slot dynamically because the data.win CANNOT be trusted to know how localVars the script has
-    uint32_t slot;
-    ptrdiff_t idx = hmgeti(ctx->currentCodeLocalsSlotMap, varID);
-    if (idx >= 0) {
-        // Already allocated :3
-        slot = ctx->currentCodeLocalsSlotMap[idx].value;
-    } else {
-        // Not allocated :(
-        slot = (uint32_t) hmlen(ctx->currentCodeLocalsSlotMap);
-        // Even though we are dynamically allocating the slots, we are still bound to whatever localVars is allocated to
-        // So, if a script goes over the MAX_CODE_LOCALS, it would cause unforeseen consequences...
-        requireMessage(MAX_CODE_LOCALS > slot, "resolveLocalSlot: exceeded MAX_CODE_LOCALS while allocating a slot for an array-only local");
-        hmput(ctx->currentCodeLocalsSlotMap, varID, slot);
-        // stb_ds's hmput may reallocate and writes the new pointer back to its lvalue argument only, mirror the update into codeLocalsSlotMaps[] to actually persist it.
-        ctx->codeLocalsSlotMaps[ctx->currentCodeIndex] = ctx->currentCodeLocalsSlotMap;
-    }
+    uint32_t slot = IntIntHashMap_getOrInsertSequential(ctx->currentCodeLocalsSlotMap, varID);
+    // Even though we are dynamically allocating the slots, we are still bound to whatever localVars is allocated to
+    // So, if a script goes over the MAX_CODE_LOCALS, it would cause unforeseen consequences...
+    requireMessage(MAX_CODE_LOCALS > slot, "resolveLocalSlot: exceeded MAX_CODE_LOCALS while allocating a slot for an array-only local");
 
     // Grow this frame's localVars window to cover `slot` whether the entry is pre-existing or freshly allocated.
     // Pre-existing entries can still be past ctx->localVarCount if a nested call to the same code extended the slot map while the outer frame was suspended (the outer frame's localVarCount is captured at call entry and doesn't follow later growth).
@@ -615,9 +604,9 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
             int32_t peekId = RValue_toInt32(*peek);
             Instance* peekInst = findInstanceByTarget(ctx, peekId);
             if (peekInst != nullptr) {
-                ptrdiff_t svIdx = hmgeti(peekInst->selfVars, varDef->varID);
-                if (svIdx >= 0) {
-                    RValue val = peekInst->selfVars[svIdx].value;
+                RValue* peekSlot = IntRValueHashMap_findSlot(&peekInst->selfVars, varDef->varID);
+                if (peekSlot != nullptr) {
+                    RValue val = *peekSlot;
                     val.ownsString = false;
                     return val;
                 }
@@ -701,13 +690,12 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
                 fprintf(stderr, "VM: [%s] Read on self var '%s' but no current instance (instanceType=%d, varType=%s, isArray=%s, originalInstanceType=%d, hasInstanceType=%s, varID=%d)\n", ctx->currentCodeName, varDef->name, instanceType, varTypeName, access.isArray ? "true" : "false", originalInstanceType, access.hasInstanceType ? "true" : "false", varDef->varID);
                 return RValue_makeReal(0.0);
             }
-            ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
+            slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
             // sparse storage: nonexistent entry -> treat as undefined scalar (array reads fall through to VM_arrayReadAt returning undefined)
-            if (svIdx < 0) {
+            if (slot == nullptr) {
                 if (access.isArray) return (RValue){ .type = RVALUE_UNDEFINED };
                 return (RValue){ .type = RVALUE_UNDEFINED };
             }
-            slot = &inst->selfVars[svIdx].value;
             break;
         }
     }
@@ -766,14 +754,10 @@ static void writeSingleInstanceVariable(VMContext* ctx, Instance* inst, Variable
         return;
     }
 
-    // Array write — materialise-on-write via VM_arrayWriteAt. Ensure the self-var slot exists (sparse hashmap inserts a new RVALUE_UNDEFINED slot if needed), then hand over val.
+    // Array write - materialise-on-write via VM_arrayWriteAt. getOrInsertUndefined returns the existing slot or inserts an UNDEFINED entry and returns it.
     if (access->isArray) {
-        ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-        if (0 > svIdx) {
-            hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-            svIdx = hmgeti(inst->selfVars, varDef->varID);
-        }
-        VM_arrayWriteAt((VMContext*) ctx, &inst->selfVars[svIdx].value, access->arrayIndex, val);
+        RValue* slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
+        VM_arrayWriteAt((VMContext*) ctx, slot, access->arrayIndex, val);
         return;
     }
 
@@ -939,12 +923,7 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
                 RValue_free(&val);
                 return;
             }
-            ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-            if (0 > svIdx) {
-                hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-                svIdx = hmgeti(inst->selfVars, varDef->varID);
-            }
-            slot = &inst->selfVars[svIdx].value;
+            slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
             break;
         }
     }
@@ -1132,12 +1111,7 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
                             ? (Instance*) ctx->otherInstance
                             : (Instance*) ctx->currentInstance;
                         require(inst != nullptr);
-                        ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-                        if (0 > svIdx) {
-                            hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-                            svIdx = hmgeti(inst->selfVars, varDef->varID);
-                        }
-                        slot = &inst->selfVars[svIdx].value;
+                        slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
                         break;
                     }
                     default: {
@@ -1146,12 +1120,7 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
                             fprintf(stderr, "VM: ARRAYPUSHAF: no instance for scope %d varID=%d\n", scope, varDef->varID);
                             abort();
                         }
-                        ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-                        if (0 > svIdx) {
-                            hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-                            svIdx = hmgeti(inst->selfVars, varDef->varID);
-                        }
-                        slot = &inst->selfVars[svIdx].value;
+                        slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
                         break;
                     }
                 }
@@ -1269,12 +1238,8 @@ static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraD
             fprintf(stderr, "VM: PushBltn ARRAYPUSHAF: no instance for scope %d varID=%d\n", scope, varDef->varID);
             abort();
         }
-        ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-        if (0 > svIdx) {
-            hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-            svIdx = hmgeti(inst->selfVars, varDef->varID);
-        }
-        pushTopLevelArrayRef(ctx, &inst->selfVars[svIdx].value);
+        RValue* slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
+        pushTopLevelArrayRef(ctx, slot);
         return;
     }
 #endif
@@ -1429,12 +1394,7 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
                         RValue_free(&val);
                         return;
                     }
-                    ptrdiff_t svIdx = hmgeti(inst->selfVars, varDef->varID);
-                    if (0 > svIdx) {
-                        hmput(inst->selfVars, varDef->varID, (RValue){ .type = RVALUE_UNDEFINED });
-                        svIdx = hmgeti(inst->selfVars, varDef->varID);
-                    }
-                    slot = &inst->selfVars[svIdx].value;
+                    slot = IntRValueHashMap_getOrInsertUndefined(&inst->selfVars, varDef->varID);
                     break;
                 }
             }
@@ -2832,7 +2792,6 @@ VMContext* VM_create(DataWin* dataWin) {
     ctx->codeLocalsSlotMaps = nullptr;
     if (dataWin->gen8.bytecodeVersion >= 17) {
         ctx->codeLocalsSlotMaps = safeCalloc(dataWin->code.count, sizeof(*ctx->codeLocalsSlotMaps));
-        // For now we don't need to do anything, the localVars will be registered during runtime because we can't figure out how many locals a CODE has reliably
     }
 
     // Register built-in functions
@@ -2915,7 +2874,7 @@ static CodeLocals* resolveCodeLocals(VMContext* ctx, const char* codeName) {
 // Sets the currentCodeLocalsSlotMap for BC17+ games
 static void setCurrentCodeLocalsSlotMap(VMContext* ctx) {
     if (IS_BC17_OR_HIGHER(ctx)) {
-        ctx->currentCodeLocalsSlotMap = ctx->codeLocalsSlotMaps[ctx->currentCodeIndex];
+        ctx->currentCodeLocalsSlotMap = &ctx->codeLocalsSlotMaps[ctx->currentCodeIndex];
     }
 }
 
@@ -2925,7 +2884,7 @@ static uint32_t computeLocalsCount(VMContext* ctx, CodeEntry* code) {
     } else {
         // We can't trust localVarCount in GM:S 2.3+, so we will get our cached map
         // It is NOT the "right" localsCount because it may increase during runtime, but for now, this shall do
-        return hmlen(ctx->codeLocalsSlotMaps[ctx->currentCodeIndex]);
+        return IntIntHashMap_count(&ctx->codeLocalsSlotMaps[ctx->currentCodeIndex]);
     }
 }
 
@@ -3725,7 +3684,7 @@ void VM_free(VMContext* ctx) {
     // Free per-code varID -> slot maps (BC17+ only; nullptr otherwise).
     if (ctx->codeLocalsSlotMaps != nullptr) {
         repeat(ctx->dataWin->code.count, i) {
-            hmfree(ctx->codeLocalsSlotMaps[i]);
+            IntIntHashMap_free(&ctx->codeLocalsSlotMaps[i]);
         }
         free(ctx->codeLocalsSlotMaps);
         ctx->codeLocalsSlotMaps = nullptr;

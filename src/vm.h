@@ -8,6 +8,7 @@
 #include "rvalue.h"
 #include "utils.h"
 #include "profiler.h"
+#include "int_int_hashmap.h"
 
 // ===[ Instance Types (signed 16-bit) ]===
 #define INSTANCE_SELF      (-1)
@@ -111,14 +112,6 @@ typedef struct {
     int32_t scriptCodeIndex; // cached script code index, or -1 if not a script
 } FuncCallCache;
 
-// ===[ LocalSlotEntry - varID -> localVars slot index (Bytecode Version 17+) ]===
-// stb_ds hmap entry layout: one per CodeLocals, keyed by the local's shared varID (== CodeLocals.locals[i].index).
-// Value is the slot position i within that code's localVars.
-typedef struct {
-    int32_t key;
-    uint32_t value;
-} LocalSlotEntry;
-
 // ===[ CallFrame - Saved state for script-to-script calls ]===
 typedef struct CallFrame {
     uint32_t savedIP;
@@ -128,7 +121,7 @@ typedef struct CallFrame {
     uint32_t savedLocalsCount;
     const char* savedCodeName;
     int32_t savedSavearefBalance;
-    LocalSlotEntry* savedCodeLocalsSlotMap;
+    IntIntHashMap* savedCodeLocalsSlotMap;
     RValue* savedScriptArgs;
     int32_t savedScriptArgCount;
     int32_t savedCurrentCodeIndex;
@@ -180,9 +173,8 @@ typedef struct VMContext {
     struct Instance* otherInstance; // "other" instance for collision events
     DataWin* dataWin;
     struct Runner* runner;
-    // BC17+: varID -> localVars slot lookup for the current code.
-    // See codeLocalsSlotMaps
-    LocalSlotEntry* currentCodeLocalsSlotMap;
+    // BC17+: varID -> localVars slot lookup for the current code. Points into codeLocalsSlotMaps[currentCodeIndex] for BC17+, nullptr for BC16.
+    IntIntHashMap* currentCodeLocalsSlotMap;
     FuncCallCache* funcCallCache;
     const char* currentCodeName;
     int32_t currentCodeIndex; // Index into code.entries for the currently executing code
@@ -221,7 +213,7 @@ typedef struct VMContext {
     // codeName -> CodeLocals* hash map (stb_ds)
     struct { char* key; CodeLocals* value; }* codeLocalsMap;
     // BC17+: A map of CODE indexes -> localVars slot lookup map
-    LocalSlotEntry** codeLocalsSlotMaps;
+    IntIntHashMap* codeLocalsSlotMaps;
     // varName -> varID hash map for global variables (stb_ds)
     struct { char* key; int32_t value; }* globalVarNameMap;
     // varName -> varID hash map for self/instance-scoped variables (stb_ds).

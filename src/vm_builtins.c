@@ -2251,7 +2251,7 @@ static bool variableInstanceExistsOn(VMContext* ctx, Instance* target, const cha
     if (VMBuiltins_resolveBuiltinVarId(name) != BUILTIN_VAR_UNKNOWN) return true;
     ptrdiff_t slot = shgeti(ctx->selfVarNameMap, (char*) name);
     if (0 > slot) return false;
-    return hmgeti(target->selfVars, ctx->selfVarNameMap[slot].value) >= 0;
+    return IntRValueHashMap_contains(&target->selfVars, ctx->selfVarNameMap[slot].value);
 }
 
 static RValue builtinVariableInstanceExists(VMContext* ctx, RValue* args, int32_t argCount) {

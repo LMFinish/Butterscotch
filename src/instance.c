@@ -6,6 +6,7 @@
 
 #include "stb_ds.h"
 #include "utils.h"
+#include "int_rvalue_hashmap.h"
 
 Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, GMLReal x, GMLReal y) {
     Instance* inst = safeCalloc(1, sizeof(Instance));
@@ -43,7 +44,6 @@ Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, GMLReal x, G
     inst->gravityDirection = 270.0f;
     inst->pathIndex = -1;
     inst->pathScale = 1.0f;
-    inst->selfVars = nullptr;
 
     // Initialize alarms to -1 (inactive)
     repeat(GML_ALARM_COUNT, i) {
@@ -56,11 +56,8 @@ Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, GMLReal x, G
 void Instance_free(Instance* instance) {
     if (instance == nullptr) return;
 
-    // Free owned strings and decRef owned arrays in selfVars hashmap
-    repeat(hmlen(instance->selfVars), i) {
-        RValue_free(&instance->selfVars[i].value);
-    }
-    hmfree(instance->selfVars);
+    // Free owned strings and decRef owned arrays in selfVars hashmap, then release the entries buffer.
+    IntRValueHashMap_freeAllValues(&instance->selfVars);
     arrfree(instance->collisionCells);
 
     free(instance);
@@ -110,8 +107,11 @@ void Instance_copyFields(Instance* source, Instance* destination) {
     destination->activeAlarmMask = source->activeAlarmMask;
 
     // Deep-copy self variables (Instance_setSelfVar handles string duplication + array incRef)
-    repeat(hmlen(source->selfVars), i) {
-        Instance_setSelfVar(destination, source->selfVars[i].key, source->selfVars[i].value);
+    repeat(source->selfVars.capacity, i) {
+        IntRValueEntry* entry = &source->selfVars.entries[i];
+        if (entry->key != INT_RVALUE_HASHMAP_EMPTY_KEY) {
+            Instance_setSelfVar(destination, entry->key, entry->value);
+        }
     }
 }
 
