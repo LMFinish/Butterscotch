@@ -1955,28 +1955,32 @@ void Runner_step(Runner* runner) {
     repeat(alarmCount, i) {
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
+        if (inst->activeAlarmMask == 0) continue;
 
-        repeat(GML_ALARM_COUNT, alarmIdx) {
-            if (inst->alarm[alarmIdx] > 0) {
+        uint16_t mask = inst->activeAlarmMask;
+        while (mask != 0) {
+            int32_t alarmIdx = __builtin_ctz(mask);
+            mask &= (uint16_t) (mask - 1);
+
 #ifdef ENABLE_VM_TRACING
-                GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
+            GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
+            if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
+                fprintf(stderr, "VM: [%s] Ticking down Alarm[%d] (instanceId=%d), current tick is %d\n", object->name, alarmIdx, inst->instanceId, inst->alarm[alarmIdx]);
+            }
+#endif
+
+            inst->alarm[alarmIdx]--;
+            if (inst->alarm[alarmIdx] == 0) {
+                inst->alarm[alarmIdx] = -1;
+                inst->activeAlarmMask &= (uint16_t) ~(1u << alarmIdx);
+
+#ifdef ENABLE_VM_TRACING
                 if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
-                    fprintf(stderr, "VM: [%s] Ticking down Alarm[%d] (instanceId=%d), current tick is %d\n", object->name, alarmIdx, inst->instanceId, inst->alarm[alarmIdx]);
+                    fprintf(stderr, "VM: [%s] Firing Alarm[%d] (instanceId=%d)\n", object->name, alarmIdx, inst->instanceId);
                 }
 #endif
 
-                inst->alarm[alarmIdx]--;
-                if (inst->alarm[alarmIdx] == 0) {
-                    inst->alarm[alarmIdx] = -1;
-
-#ifdef ENABLE_VM_TRACING
-                    if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
-                        fprintf(stderr, "VM: [%s] Firing Alarm[%d] (instanceId=%d)\n", object->name, alarmIdx, inst->instanceId);
-                    }
-#endif
-
-                    Runner_executeEvent(runner, inst, EVENT_ALARM, alarmIdx);
-                }
+                Runner_executeEvent(runner, inst, EVENT_ALARM, alarmIdx);
             }
         }
     }

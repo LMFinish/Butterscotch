@@ -107,6 +107,7 @@ void Instance_copyFields(Instance* source, Instance* destination) {
     repeat(GML_ALARM_COUNT, i) {
         destination->alarm[i] = source->alarm[i];
     }
+    destination->activeAlarmMask = source->activeAlarmMask;
 
     // Deep-copy self variables (Instance_setSelfVar handles string duplication + array incRef)
     repeat(hmlen(source->selfVars), i) {

@@ -1028,6 +1028,8 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
 #endif
 
                 inst->alarm[arrayIndex] = newValue;
+                if (newValue > 0) inst->activeAlarmMask |= (uint16_t) (1u << arrayIndex);
+                else inst->activeAlarmMask &= (uint16_t) ~(1u << arrayIndex);
             }
             return;
         }
@@ -6229,6 +6231,8 @@ static RValue builtinActionSetAlarm(VMContext* ctx, MAYBE_UNUSED RValue* args, M
 #endif
 
         inst->alarm[alarmIndex] = steps;
+        if (steps > 0) inst->activeAlarmMask |= (uint16_t) (1u << alarmIndex);
+        else inst->activeAlarmMask &= (uint16_t) ~(1u << alarmIndex);
     }
 
     return RValue_makeUndefined();
@@ -6253,6 +6257,8 @@ static RValue builtinAlarmSet(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_U
 #endif
 
         inst->alarm[alarmIndex] = value;
+        if (value > 0) inst->activeAlarmMask |= (uint16_t) (1u << alarmIndex);
+        else inst->activeAlarmMask &= (uint16_t) ~(1u << alarmIndex);
     }
 
     return RValue_makeUndefined();
