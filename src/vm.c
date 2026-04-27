@@ -1907,7 +1907,7 @@ static void handleDup(VMContext* ctx, uint32_t instr) {
         int32_t baseIdx = ctx->stack.top - totalSlots;
 
         // Save top group to temp
-        RValue temp[topSlots];
+        RValue temp[32];
         for (int32_t i = 0; topSlots > i; i++) {
             temp[i] = ctx->stack.slots[ctx->stack.top - topSlots + i];
         }

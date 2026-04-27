@@ -170,9 +170,12 @@ elseif(PLATFORM STREQUAL "ps2")
     else()
         list(REMOVE_ITEM PLATFORM_SOURCES ${CMAKE_SOURCE_DIR}/src/ps2/ps2_audio_system.c)
     endif()
-    # Treat unsuffixed float constants as single-precision to avoid accidental
-    # float->double promotions on platforms with no hardware double
-    target_compile_options(butterscotch PRIVATE -fsingle-precision-constant -Werror=double-promotion)
+
+    # -fsingle-precision-constant: Treat unsuffixed float constants as single-precision to avoid accidental  float->double promotions on platforms with no hardware double
+    # -Werror=double-promotion: Warn when something is being promoted to a double
+    # -fomit-frame-pointer: frees a register on a target with tight register pressure
+    # -ffast-math: enables aggressive floating point optimizations
+    target_compile_options(butterscotch PRIVATE -fsingle-precision-constant -Werror=double-promotion -fomit-frame-pointer -ffast-math)
 
     if(PS2)
         # Compiling on the Docker container
