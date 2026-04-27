@@ -446,19 +446,17 @@ static int compareDrawableDepth(const void* a, const void* b) {
     return 0;
 }
 
-static int compareInstanceDepth(const void* a, const void* b) {
-    Instance* instA = *(Instance**) a;
-    Instance* instB = *(Instance**) b;
-    // Higher depth draws first (behind), lower depth draws last (in front)
-    if (instA->depth > instB->depth) return -1;
-    if (instB->depth > instA->depth) return 1;
-    return 0;
-}
+static void fireDrawSubtype(Runner* runner, Drawable* drawables, int32_t drawableCount, int32_t subtype) {
+    repeat(drawableCount, i) {
+        Drawable* d = &drawables[i];
+        if (d->type != DRAWABLE_INSTANCE)
+            continue;
 
+        Instance* inst = d->instance;
+        if (!inst->active || !inst->visible)
+            continue;
 
-static void fireDrawSubtype(Runner* runner, Instance** drawList, int32_t drawCount, int32_t subtype) {
-    repeat(drawCount, i) {
-        Runner_executeEvent(runner, drawList[i], EVENT_DRAW, subtype);
+        Runner_executeEvent(runner, inst, EVENT_DRAW, subtype);
     }
 }
 
@@ -603,23 +601,13 @@ void Runner_draw(Runner* runner) {
     int32_t drawableCount = (int32_t) arrlen(runner->cachedDrawables);
     Drawable* drawables = runner->cachedDrawables;
 
-    // Build a depth-sorted instance-only list for fireDrawSubtype by walking the cache and filtering active+visible.
-    Instance** drawList = nullptr;
-    repeat(drawableCount, i) {
-        Drawable* d = &drawables[i];
-        if (d->type != DRAWABLE_INSTANCE) continue;
-        Instance* inst = d->instance;
-        if (inst->active && inst->visible) arrput(drawList, inst);
-    }
-    int32_t drawCount = (int32_t) arrlen(drawList);
-
     // Draw non-foreground backgrounds (behind everything)
     if (!DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0))
         Runner_drawBackgrounds(runner, false);
 
-    // Fire draw subtypes in correct GameMaker order
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_PRE);
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_BEGIN);
+    // Fire draw subtypes in correct GameMaker order. fireDrawSubtype walks the cache and filters inline.
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_PRE);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_BEGIN);
 
     // Draw interleaved tiles and instances
     repeat(drawableCount, i) {
@@ -805,35 +793,22 @@ void Runner_draw(Runner* runner) {
         }
     }
 
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_END);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_END);
 
     // Draw foreground backgrounds (in front of instances, behind GUI)
     Runner_drawBackgrounds(runner, true);
 
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_POST);
-
-    arrfree(drawList);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_POST);
 }
 
 void Runner_drawGUI(Runner* runner) {
     rebuildDrawableCacheIfDirty(runner);
+    Drawable* drawables = runner->cachedDrawables;
+    int32_t drawableCount = (int32_t) arrlen(drawables);
 
-    // Reuse the cached depth-sorted drawables: walk it and pick instances that are active+visible.
-    Instance** drawList = nullptr;
-    int32_t cachedCount = (int32_t) arrlen(runner->cachedDrawables);
-    repeat(cachedCount, i) {
-        Drawable* d = &runner->cachedDrawables[i];
-        if (d->type != DRAWABLE_INSTANCE) continue;
-        Instance* inst = d->instance;
-        if (inst->active && inst->visible) arrput(drawList, inst);
-    }
-    int32_t drawCount = (int32_t) arrlen(drawList);
-
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_GUI_BEGIN);
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_GUI);
-    fireDrawSubtype(runner, drawList, drawCount, DRAW_GUI_END);
-
-    arrfree(drawList);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI_BEGIN);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI);
+    fireDrawSubtype(runner, drawables, drawableCount, DRAW_GUI_END);
 }
 
 // ===[ Instance Creation Helper ]===
