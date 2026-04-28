@@ -1607,13 +1607,9 @@ static void handleShr(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(>>);
 }
 
-static void handleConv(VMContext* ctx, uint32_t instr) {
-    uint8_t srcType = instrType1(instr);
-    uint8_t dstType = instrType2(instr);
-
+static void handleConv(VMContext* ctx, uint8_t srcType, uint8_t dstType, uint8_t convKey) {
     RValue val = stackPop(ctx);
 
-    uint8_t convKey = (dstType << 4) | srcType;
     RValue result;
 
     switch (convKey) {
@@ -2653,6 +2649,8 @@ static RValue executeLoop(VMContext* ctx) {
     // The ip is mutable, so we need to use VM_SYNC_IP and VM_RELOAD_IP every time an opcode handler may access it or write to it
     uint32_t ip = ctx->ip;
 
+    // Some opcodes have their handler or parts of their handler inlined
+    // Those are opcodes that during real gameplay (using "--profile-opcodes") shown that, with inlining and keeping only the frequently called handle parts, we could squeeze MORE performance from the interpreter!
     while (codeEnd > ip) {
 #ifdef ENABLE_VM_GML_PROFILER
         if (ctx->profiler != nullptr)
@@ -2771,9 +2769,60 @@ static RValue executeLoop(VMContext* ctx) {
             case OP_NOT: handleNot(ctx, instr); break;
 
             // Type conversion
-            case OP_CONV:
-                handleConv(ctx, instr);
+            case OP_CONV: {
+                uint8_t srcType = instrType1(instr);
+                uint8_t dstType = instrType2(instr);
+                uint8_t convKey = (uint8_t) ((dstType << 4) | srcType);
+                RValue* top = &ctx->stack.slots[ctx->stack.top - 1];
+                bool fastHit = false;
+
+                // Inline fast paths for the four conversions that account for ~93% of all Conv opcodes in real workloads
+                switch (convKey) {
+                    case 0x52: // Int32 -> Variable (pure passthrough; just retag stack slot)
+                        fastHit = true;
+                        break;
+                    case 0x45: // Variable -> Bool
+                        if (top->type == RVALUE_INT32) {
+                            top->int32 = top->int32 > 0 ? 1 : 0;
+                            top->type = RVALUE_BOOL;
+                            fastHit = true;
+                        } else if (top->type == RVALUE_BOOL) {
+                            // Already 0/1; nothing to do
+                            fastHit = true;
+                        } else if (top->type == RVALUE_REAL) {
+                            top->int32 = top->real > (GMLReal) 0.5 ? 1 : 0;
+                            top->type = RVALUE_BOOL;
+                            fastHit = true;
+                        }
+                        break;
+                    case 0x25: // Variable -> Int32
+                        if (top->type == RVALUE_INT32) {
+                            fastHit = true;
+                        } else if (top->type == RVALUE_BOOL) {
+                            top->type = RVALUE_INT32;
+                            fastHit = true;
+                        } else if (top->type == RVALUE_REAL) {
+                            top->int32 = (int32_t) top->real;
+                            top->type = RVALUE_INT32;
+                            fastHit = true;
+                        }
+                        break;
+                    case 0x02: // Int32 -> Double (Real)
+                        top->real = (GMLReal) top->int32;
+                        top->type = RVALUE_REAL;
+                        fastHit = true;
+                        break;
+                }
+
+                if (fastHit) {
+#if IS_BC17_OR_HIGHER_ENABLED
+                    if (IS_BC17_OR_HIGHER(ctx)) top->gmlStackType = dstType;
+#endif
+                } else {
+                    handleConv(ctx, srcType, dstType, convKey);
+                }
                 break;
+            }
 
             // Comparison
             case OP_CMP:
