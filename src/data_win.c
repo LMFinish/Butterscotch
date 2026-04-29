@@ -99,12 +99,13 @@ void GamePath_computeInternal(GamePath* path) {
     tempIntPoints = nullptr;
     tempIntPointCount = 0;
 
-    if (path->pointCount == 0) {
-        path->internalPointCount = 0;
-        path->internalPoints = nullptr;
-        path->length = 0.0;
+    free(path->internalPoints);
+    path->internalPoints = nullptr;
+    path->internalPointCount = 0;
+    path->length = 0.0;
+
+    if (path->pointCount == 0)
         return;
-    }
 
     if (path->isSmooth) {
         // ComputeCurved (yyPath.js:254-292)
@@ -627,6 +628,9 @@ static void parsePATH(BinaryReader* reader, DataWin* dw) {
     repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
         GamePath* path = &p->paths[i];
+        path->internalPoints = nullptr;
+        path->internalPointCount = 0;
+        path->length = 0.0;
         path->name = readStringPtr(reader, dw);
         path->isSmooth = BinaryReader_readBool32(reader);
         path->isClosed = BinaryReader_readBool32(reader);
