@@ -1293,6 +1293,22 @@ static void handlePushI(VMContext* ctx, uint32_t instr) {
     stackPushTyped(ctx, val, GML_TYPE_INT16);
 }
 
+// When storing into a variant variable from an int32/int64 stack source, coerce to real.
+// GMS variables normalize integer literals to doubles so subsequent arithmetic routes through the real fast path instead of int32 x int32 wrapping.
+static inline RValue coerceIntStoreToReal(RValue val, uint8_t type2) {
+    if (type2 == GML_TYPE_INT32 || type2 == GML_TYPE_INT64 || type2 == GML_TYPE_INT16) {
+        if (val.type == RVALUE_INT32) {
+            return RValue_makeReal((GMLReal) val.int32);
+        }
+#ifndef NO_RVALUE_INT64
+        if (val.type == RVALUE_INT64) {
+            return RValue_makeReal((GMLReal) val.int64);
+        }
+#endif
+    }
+    return val;
+}
+
 static void handlePop(VMContext* ctx, uint32_t instr, uint8_t type1, uint32_t varRef, uint8_t varType, int32_t instanceType) {
     uint8_t type2 = instrType2(instr);   // source type (what's on stack)
 
@@ -1356,17 +1372,8 @@ static void handlePop(VMContext* ctx, uint32_t instr, uint8_t type1, uint32_t va
         val = converted;
     }
 
-    // When storing into a variant variable from an int32/int64 stack source, coerce to real.
-    // GMS variables normalize integer literals to doubles so subsequent arithmetic routes through the real fast path instead of int32 x int32 wrapping.
-    if (type1 == GML_TYPE_VARIABLE && !isCompoundAssignment && (type2 == GML_TYPE_INT32 || type2 == GML_TYPE_INT64 || type2 == GML_TYPE_INT16)) {
-        if (val.type == RVALUE_INT32) {
-            val = RValue_makeReal((GMLReal) val.int32);
-        }
-#ifndef NO_RVALUE_INT64
-        else if (val.type == RVALUE_INT64) {
-            val = RValue_makeReal((GMLReal) val.int64);
-        }
-#endif
+    if (type1 == GML_TYPE_VARIABLE && !isCompoundAssignment) {
+        val = coerceIntStoreToReal(val, type2);
     }
 
     if (varType == VARTYPE_ARRAY) {
@@ -2809,6 +2816,7 @@ static RValue executeLoop(VMContext* ctx) {
                 if (type1 == GML_TYPE_VARIABLE && varType == VARTYPE_NORMAL) {
                     // Inline fast path for the simple variable-assignment case: type1==VARIABLE, which is ~99.998% of all Pops in real workloads
                     RValue val = stackPop(ctx);
+                    val = coerceIntStoreToReal(val, instrType2(instr));
                     resolveVariableWrite(ctx, instanceType, varRef, val);
                 } else {
                     handlePop(ctx, instr, type1, varRef, varType, instanceType);
