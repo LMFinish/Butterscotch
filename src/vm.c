@@ -765,9 +765,73 @@ static void writeSingleInstanceVariable(VMContext* ctx, Instance* inst, Variable
     Instance_setSelfVar(inst, varDef->varID, val);
 }
 
+// Transfer ownership of "val into "*dest", freeing the old value first.
+// Strings are duplicated only if the source view is non-owning (so we don't double-free).
+// Arrays/methods bump refcount when needed and flip the source's ownsString flag to take a strong ref.
+static inline void writeIntoSlot(RValue* dest, RValue val) {
+    RValue_free(dest);
+    if (val.type == RVALUE_STRING && !val.ownsString && val.string != nullptr) {
+        *dest = RValue_makeOwnedString(safeStrdup(val.string));
+    } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
+        if (!val.ownsString) GMLArray_incRef(val.array);
+        val.ownsString = true;
+        *dest = val;
+#if IS_BC17_OR_HIGHER_ENABLED
+    } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
+        if (!val.ownsString) GMLMethod_incRef(val.method);
+        val.ownsString = true;
+        *dest = val;
+#endif
+    } else {
+        *dest = val;
+    }
+}
+
+// Force out-of-line so the OP_POP fast path in executeLoop doesn't inline this, because we already have an "optimized" version for common writes
+__attribute__((noinline))
 static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t varRef, RValue val) {
     Variable* varDef = resolveVarDef(ctx, varRef);
 
+    // Fast path: When the varType==VARTYPE_NORMAL...
+    // * We can skip the popArrayAccess
+    // * We can skip the BC17 STACKTOP and INSTANCE_ARG branches
+    // * We can skip the array-write block itself
+    // * We can skip BOTH instanceType switches
+    if (varDef->varID >= 0) {
+        switch (instanceType) {
+            case INSTANCE_LOCAL: {
+                uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
+                require(ctx->localVarCount > localSlot);
+                writeIntoSlot(&ctx->localVars[localSlot], val);
+                return;
+            }
+            case INSTANCE_GLOBAL: {
+                require(ctx->globalVarCount > (uint32_t) varDef->varID);
+                writeIntoSlot(&ctx->globalVars[varDef->varID], val);
+                return;
+            }
+            case INSTANCE_SELF: {
+                Instance* inst = (Instance*) ctx->currentInstance;
+                if (inst != nullptr) {
+                    Instance_setSelfVar(inst, varDef->varID, val);
+                    RValue_free(&val);
+                    return;
+                }
+                break; // fall through to slow path so the existing nullptr-instance error gets logged
+            }
+            case INSTANCE_OTHER: {
+                Instance* inst = (Instance*) ctx->otherInstance;
+                if (inst != nullptr) {
+                    Instance_setSelfVar(inst, varDef->varID, val);
+                    RValue_free(&val);
+                    return;
+                }
+                break; // fall through (otherInstance was nullptr, slow path will use currentInstance)
+            }
+        }
+    }
+
+    // The slow path is used for builtin vars, object/instance references (instanceType >= 0), INSTANCE_ARG/STACKTOP, and other miscellaneous things like if we get a nullptr above
     ArrayAccess access = popArrayAccess(ctx, varRef);
 
     // Use instance type from stack when available (VARTYPE_ARRAY / VARTYPE_STACKTOP)
@@ -956,44 +1020,13 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
         case INSTANCE_LOCAL: {
             uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
             require(ctx->localVarCount > localSlot);
-            RValue* dest = &ctx->localVars[localSlot];
-            RValue_free(dest);
-            if (val.type == RVALUE_STRING && !val.ownsString && val.string != nullptr) {
-                *dest = RValue_makeOwnedString(safeStrdup(val.string));
-            } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
-                if (!val.ownsString) GMLArray_incRef(val.array);
-                val.ownsString = true;
-                *dest = val;
-#if IS_BC17_OR_HIGHER_ENABLED
-            } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
-                if (!val.ownsString) GMLMethod_incRef(val.method);
-                val.ownsString = true;
-                *dest = val;
-#endif
-            } else {
-                *dest = val;
-            }
+            writeIntoSlot(&ctx->localVars[localSlot], val);
             return;
         }
         case INSTANCE_GLOBAL: {
             require(ctx->globalVarCount > (uint32_t) varDef->varID);
             RValue* dest = &ctx->globalVars[varDef->varID];
-            RValue_free(dest);
-            if (val.type == RVALUE_STRING && !val.ownsString && val.string != nullptr) {
-                *dest = RValue_makeOwnedString(safeStrdup(val.string));
-            } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
-                if (!val.ownsString) GMLArray_incRef(val.array);
-                val.ownsString = true;
-                *dest = val;
-#if IS_BC17_OR_HIGHER_ENABLED
-            } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
-                if (!val.ownsString) GMLMethod_incRef(val.method);
-                val.ownsString = true;
-                *dest = val;
-#endif
-            } else {
-                *dest = val;
-            }
+            writeIntoSlot(dest, val);
 #ifdef ENABLE_VM_TRACING
             if (shouldTraceVariable(ctx->varWritesToBeTraced, "global", nullptr, varDef->name)) {
                 char* rvalueAsString = RValue_toStringTyped(*dest);
@@ -1248,12 +1281,8 @@ static void handlePushI(VMContext* ctx, uint32_t instr) {
     stackPushTyped(ctx, val, GML_TYPE_INT16);
 }
 
-static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) {
-    int32_t instanceType = (int32_t) instrInstanceType(instr);
-    uint8_t type1 = instrType1(instr);   // destination type
+static void handlePop(VMContext* ctx, uint32_t instr, uint8_t type1, uint32_t varRef, uint8_t varType, int32_t instanceType) {
     uint8_t type2 = instrType2(instr);   // source type (what's on stack)
-    uint32_t varRef = resolveVarOperand(extraData);
-    uint8_t varType = (varRef >> 24) & 0xF8;
 
     RValue val;
     int32_t arrayIndex = -1;
@@ -2742,9 +2771,20 @@ static RValue executeLoop(VMContext* ctx) {
                 break;
 
             // Pop instructions
-            case OP_POP:
-                handlePop(ctx, instr, extraData);
+            case OP_POP: {
+                uint8_t type1 = instrType1(instr);
+                uint32_t varRef = resolveVarOperand(extraData);
+                uint8_t varType = (uint8_t) ((varRef >> 24) & 0xF8);
+                int32_t instanceType = instrInstanceType(instr);
+                if (type1 == GML_TYPE_VARIABLE && varType == VARTYPE_NORMAL) {
+                    // Inline fast path for the simple variable-assignment case: type1==VARIABLE, which is ~99.998% of all Pops in real workloads
+                    RValue val = stackPop(ctx);
+                    resolveVariableWrite(ctx, instanceType, varRef, val);
+                } else {
+                    handlePop(ctx, instr, type1, varRef, varType, instanceType);
+                }
                 break;
+            }
             case OP_POPZ:
                 handlePopz(ctx);
                 break;
