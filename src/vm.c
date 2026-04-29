@@ -1356,6 +1356,19 @@ static void handlePop(VMContext* ctx, uint32_t instr, uint8_t type1, uint32_t va
         val = converted;
     }
 
+    // When storing into a variant variable from an int32/int64 stack source, coerce to real.
+    // GMS variables normalize integer literals to doubles so subsequent arithmetic routes through the real fast path instead of int32 x int32 wrapping.
+    if (type1 == GML_TYPE_VARIABLE && !isCompoundAssignment && (type2 == GML_TYPE_INT32 || type2 == GML_TYPE_INT64 || type2 == GML_TYPE_INT16)) {
+        if (val.type == RVALUE_INT32) {
+            val = RValue_makeReal((GMLReal) val.int32);
+        }
+#ifndef NO_RVALUE_INT64
+        else if (val.type == RVALUE_INT64) {
+            val = RValue_makeReal((GMLReal) val.int64);
+        }
+#endif
+    }
+
     if (varType == VARTYPE_ARRAY) {
         Variable* varDef = resolveVarDef(ctx, varRef);
         if (varDef->varID == -6) {
