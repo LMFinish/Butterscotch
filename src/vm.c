@@ -2786,17 +2786,16 @@ static RValue executeLoop(VMContext* ctx) {
             }
             case OP_PUSHGLB: {
                 uint32_t varRef = resolveVarOperand(extraData);
-#if IS_BC17_OR_HIGHER_ENABLED
-                uint8_t varType = (uint8_t) ((varRef >> 24) & 0xF8);
-                if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
-                    Variable* varDef = resolveVarDef(ctx, varRef);
-                    require(ctx->globalVarCount > (uint32_t) varDef->varID);
-                    pushTopLevelArrayRef(ctx, &ctx->globalVars[varDef->varID]);
+                // Globals are not ALWAYS non-builtin (varID >= 0), some games may use the deprecated global builtins (like "score") with PUSHGLB.
+                // So due to that, we'll take the slow path if it is a builtin variable.
+                // The native runner does NOT handle global arrays from this path, so we don't need to care about them.
+                Variable* varDef = resolveVarDef(ctx, varRef);
+                if (varDef->varID == -6) {
+                    RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
+                    stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
                     break;
                 }
-#endif
-                // Globals are always non-builtin (varID >= 0); inline the read straight from globalVars[].
-                Variable* varDef = resolveVarDef(ctx, varRef);
+                // Inline the read straight from globalVars[].
                 require(ctx->globalVarCount > (uint32_t) varDef->varID);
                 RValue val = ctx->globalVars[varDef->varID];
                 val.ownsReference = false;
