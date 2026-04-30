@@ -1151,6 +1151,9 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData,
             int32_t instanceType = (int32_t) instrInstanceType(instr);
             uint32_t varRef = resolveVarOperand(extraData);
             uint8_t varType = (varRef >> 24) & 0xF8;
+            // BC17: VARTYPE_INSTANCE encodes (instanceId - 100000) in the instruction's lower 16 bits.
+            // Add 100000 back so findInstanceByTarget sees the real runtime instance ID.
+            if (varType == VARTYPE_INSTANCE) instanceType += 100000;
 #if IS_BC17_OR_HIGHER_ENABLED
             if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
                 // V17: multi-dim first-step. Stack has [scope, firstIndex] (with an optional real-instance slot underneath when scope == -9 INSTANCE_STACKTOP).
@@ -2811,6 +2814,8 @@ static RValue executeLoop(VMContext* ctx) {
                 uint32_t varRef = resolveVarOperand(extraData);
                 uint8_t varType = (uint8_t) ((varRef >> 24) & 0xF8);
                 int32_t instanceType = instrInstanceType(instr);
+                // BC17: VARTYPE_INSTANCE encodes (instanceId - 100000) in the instruction's lower 16 bits.
+                if (varType == VARTYPE_INSTANCE) instanceType += 100000;
                 int32_t type2 = instrType2(instr); // source type (what's on stack)
                 if (type1 == GML_TYPE_VARIABLE && varType == VARTYPE_NORMAL) {
                     // Inline fast path for the simple variable-assignment case: type1==VARIABLE, which is ~99.998% of all Pops in real workloads
