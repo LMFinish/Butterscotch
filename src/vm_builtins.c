@@ -2357,6 +2357,14 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
                 ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
                 if (idx >= 0) {
                     codeId = ctx->funcMap[idx].value;
+                } else {
+                    // Not a user script - might be a builtin function reference
+                    ptrdiff_t bidx = shgeti(ctx->builtinMap, (char*) funcName);
+                    if (bidx >= 0) {
+                        BuiltinFunc bf = ctx->builtinMap[bidx].value;
+                        RValue* scriptArgs = (argCount > 1) ? &args[1] : nullptr;
+                        return bf(ctx, scriptArgs, argCount - 1);
+                    }
                 }
             }
         }
